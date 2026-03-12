@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stormwater Runoff — Rational Method (QUDM)</title>
+<style>
+  :root {
+    --bg: #0c1220; --bg2: #141e30; --bg3: #0d1520;
+    --border: #1e3a5f; --border2: #1a2d47; --border3: #142035;
+    --text: #c8d6e5; --text2: #8899aa; --text3: #64748b; --text4: #4a6fa5; --text5: #3d5a80;
+    --cyan: #06b6d4; --existing: #22d3ee; --developed: #bada55; --amber: #f59e0b; --green: #10b981;
+    --tank: #a78bfa; --bypass: #fb923c; --total: #f472b6;
+    --font-mono: 'SF Mono','Cascadia Code','Fira Code','Consolas','Liberation Mono',monospace;
+    --font-sans: system-ui,-apple-system,'Segoe UI',sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{min-height:100vh;background:linear-gradient(180deg,#0c1220 0%,#111927 50%,#0f1a2a 100%);color:var(--text);font-family:var(--font-mono);font-size:13px;line-height:1.5}
+  .container{max-width:1320px;margin:0 auto;padding:20px 24px}
+  .header{border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:20px}
+  .header h1{font:700 20px/1.3 var(--font-sans);color:#e2e8f0;letter-spacing:.02em}
+  .header .sub{font-size:12px;color:var(--text3);margin-top:4px;letter-spacing:.05em;text-transform:uppercase}
+  .loc-bar{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:12px 16px;margin-bottom:16px}
+  .loc-bar label{font-size:10px;color:var(--text4);text-transform:uppercase;letter-spacing:.1em;display:block;margin-bottom:2px}
+  .loc-bar .row{display:flex;align-items:center;gap:6px}
+  .unit{font-size:11px;color:var(--text4)}
+  input[type=number],textarea{background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--cyan);padding:6px 10px;font:13px var(--font-mono);outline:none;width:110px}
+  input[type=number]:focus,textarea:focus{border-color:var(--cyan)}
+  textarea{width:100%;min-height:120px;color:var(--text2);font-size:11px;resize:vertical}
+  .map-wrap{width:100%;height:200px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;margin-bottom:16px;overflow:hidden}
+  .map-wrap iframe{width:100%;height:100%;border:0}
+  .card{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:16px}
+  .card-title{font:700 11px/1 var(--font-mono);color:var(--text4);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border2);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .formula{background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:8px 12px;color:var(--text3);font-size:11px;margin-bottom:12px;font-style:italic}
+  .params-row{display:flex;gap:24px;flex-wrap:wrap;align-items:center}
+  .param{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .param span.lbl{font-size:12px;color:var(--text2);min-width:170px}
+  .columns{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:860px){.columns{grid-template-columns:1fr}}
+  .col-card{background:var(--bg2);border-radius:6px;padding:16px}
+  .col-card.existing{border:1px solid #22d3ee33;border-top:3px solid var(--existing)}
+  .col-card.developed{border:1px solid #bada5533;border-top:3px solid var(--developed)}
+  .col-title{font:700 14px/1.3 var(--font-sans);margin-bottom:12px}
+  .col-title.ex{color:var(--existing)}.col-title.dev{color:var(--developed)}
+  input[type=range]{width:100%;cursor:pointer;margin-bottom:8px}
+  input[type=range].ex{accent-color:var(--existing)}input[type=range].dev{accent-color:var(--developed)}
+  .c10-line{font-size:11px;color:var(--text4);margin-bottom:10px}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text4);font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+  th.r,td.r{text-align:right}
+  td{padding:5px 8px;border-bottom:1px solid #111d2e;color:var(--text)}
+  tr.hl{background:#1a2a40}tr.cc{background:#2a1a0a}tr.cc td{color:var(--amber);font-weight:600}
+  .accent-ex{color:var(--existing);font-weight:600}.accent-dev{color:var(--developed);font-weight:600}
+  .summary-box{border-radius:6px;padding:14px;text-align:center;margin-top:12px}
+  .summary-box.ex{background:#22d3ee0a;border:1px solid #22d3ee30}
+  .summary-box.dev{background:#bada550a;border:1px solid #bada5530}
+  .big-num{font-size:28px;font-weight:700;line-height:1.2}
+  .big-num.ex{color:var(--existing)}.big-num.dev{color:var(--developed)}
+  .big-num span{font-size:14px}
+  .big-label{font-size:10px;color:var(--text4);text-transform:uppercase;letter-spacing:.1em;margin-top:2px}
+  .cc-line{margin-top:8px;color:var(--amber);font-size:13px;font-weight:600}
+  .cc-line span{font-size:10px;font-weight:400;color:#b68a1a}
+  .tag{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+  .tag.sample{background:#f59e0b18;color:var(--amber)}.tag.bom{background:#10b98118;color:var(--green)}
+  .btn{background:var(--cyan);color:var(--bg);border:none;border-radius:4px;padding:8px 16px;font:700 12px var(--font-mono);cursor:pointer;letter-spacing:.02em}
+  .btn:hover{filter:brightness(1.15)}
+  .btn-sec{background:transparent;color:var(--cyan);border:1px solid var(--cyan);border-radius:4px;padding:7px 16px;font:600 12px var(--font-mono);cursor:pointer;text-decoration:none}
+  .btn-sec:hover{background:#06b6d410}
+  .ifd-scroll{overflow:auto;max-height:160px}
+  .ifd-scroll th{position:sticky;top:0;background:var(--bg2);z-index:1}
+  .notes-card{background:var(--bg3);border-color:var(--border3)}
+  .notes-card .inner{font-size:10px;color:var(--text5);line-height:1.8}
+  .notes-card strong{color:var(--text4)}
+  .footer{text-align:center;padding:16px 0;font-size:10px;color:#283d55}
+  .inc-pos{color:var(--amber);font-weight:600}
+  .hidden{display:none}
+  a{color:var(--cyan)}
+  .det-section{border:1px solid #a78bfa33;border-top:3px solid var(--tank);border-radius:6px;background:var(--bg2);padding:20px;margin-bottom:16px}
+  .det-title{font:700 16px/1.3 var(--font-sans);color:var(--tank);margin-bottom:4px}
+  .det-sub{font-size:11px;color:var(--text3);margin-bottom:16px}
+  .det-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:860px){.det-grid{grid-template-columns:1fr}}
+  .det-card{background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:14px}
+  .det-card-title{font:700 10px/1 var(--font-mono);color:var(--text4);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #111d2e}
+  .outlet-row{display:grid;grid-template-columns:24px 1fr 1fr 1fr;gap:8px;align-items:center;margin-bottom:6px}
+  .outlet-num{font-size:11px;color:var(--tank);font-weight:700;text-align:center}
+  .outlet-label{font-size:10px;color:var(--text3);margin-bottom:2px}
+  .det-result-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+  .det-stat{background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:12px;text-align:center}
+  .det-stat .val{font-size:22px;font-weight:700;line-height:1.2}
+  .det-stat .lbl{font-size:9px;color:var(--text4);text-transform:uppercase;letter-spacing:.1em;margin-top:2px}
+  .pass{color:var(--green)}.fail{color:#ef4444}
+  .canvas-wrap{background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:12px;margin-bottom:12px}
+  .canvas-wrap canvas{width:100%;height:280px;display:block}
+  .canvas-label{font-size:10px;color:var(--text4);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:8px}
+  .legend-item{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text2)}
+  .legend-swatch{width:14px;height:3px;border-radius:1px}
+  .check-toggle{display:flex;align-items:center;gap:8px;margin-bottom:12px;cursor:pointer;user-select:none}
+  .check-toggle input{accent-color:var(--tank);width:16px;height:16px;cursor:pointer}
+  .check-toggle span{font-size:12px;color:var(--text)}
+  select{background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--cyan);padding:6px 10px;font:12px var(--font-mono);outline:none;cursor:pointer;appearance:auto}
+  select:focus{border-color:var(--cyan)}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+  .toolbar .btn,.toolbar .btn-sec{font-size:11px;padding:6px 12px}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#10b981;color:#fff;padding:10px 20px;border-radius:6px;font:600 12px var(--font-sans);z-index:999;opacity:0;transition:opacity .3s;pointer-events:none}
+  .toast.show{opacity:1}
+  @media print{
+    .ifd-scroll{max-height:none!important;overflow:visible!important}
+    .map-wrap,.toolbar,.btn,.btn-sec,#ifdEditor,.check-toggle input,input[type=range],select,.loc-bar a,#optimiserCard{display:none!important}
+    body{background:#fff!important;color:#000!important;font-size:11px}
+    .container{max-width:100%;padding:10px}
+    .card,.col-card,.det-section,.det-card,.canvas-wrap,.summary-box,.notes-card{border-color:#ccc!important;background:#fff!important;box-shadow:none!important;break-inside:avoid}
+    .header{border-color:#ccc}
+    .header h1{color:#000!important;font-size:16px}
+    .header .sub{color:#555!important}
+    th,td,.card-title,.col-title,.det-title,.det-card-title,.c10-line,.formula,.unit,.det-stat .lbl,.big-label{color:#333!important}
+    .formula{background:#f5f5f5!important;border-color:#ddd!important}
+    .accent-ex,.big-num.ex,.col-title.ex{color:#0891b2!important}
+    .accent-dev,.big-num.dev,.col-title.dev{color:#65a30d!important}
+    .det-title{color:#6d28d9!important}
+    tr.hl{background:#f0f9ff!important}tr.cc{background:#fffbeb!important}tr.cc td{color:#92400e!important}
+    .pass{color:#15803d!important}.fail{color:#dc2626!important}
+    .det-stat{border-color:#ddd!important}
+    .det-stat .val{font-size:18px}
+    .canvas-wrap canvas{height:220px!important}
+    .columns{gap:12px}
+    .footer{color:#999!important}
+    .loc-bar{background:#f9fafb!important;border-color:#ddd!important}
+    .loc-bar label{color:#555!important}
+    input[type=number]{background:#f9fafb!important;border-color:#ddd!important;color:#000!important}
+    @page{margin:15mm 10mm;size:A4 portrait}
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1 id="mainTitle">⛈ Stormwater Runoff — Rational Method</h1>
+    <div class="sub" id="mainSub">Queensland Urban Drainage Manual (QUDM) · Q = C·I·A / 360</div>
+  </div>
+  <div class="toolbar">
+    <button class="btn" onclick="shareUrl()">📋 Copy Shareable Link</button>
+    <button class="btn-sec" onclick="window.print()">🖨 Print Report</button>
+  </div>
+  <div class="toast" id="toast"></div>
+  <div class="loc-bar">
+    <div><label>Latitude</label><input type="number" step="0.001" id="lat"></div>
+    <div><label>Longitude</label><input type="number" step="0.001" id="lng"></div>
+    <div><label>Site Area</label><div class="row"><input type="number" id="area" style="width:100px"><span class="unit">m² (<span id="areaHa"></span> ha)</span></div></div>
+    <a id="mapLink" class="btn-sec" target="_blank" rel="noopener noreferrer" style="margin-left:auto;font-size:11px">↗ View on Map</a>
+  </div>
+  <div class="map-wrap"><iframe id="mapFrame" title="Site Map" scrolling="no"></iframe></div>
+  <div class="card">
+    <div class="card-title">
+      <span>IFD Rainfall Data <span class="tag sample" id="ifdTag">Sample Data</span></span>
+      <span style="display:flex;gap:8px">
+        <button class="btn" onclick="fetchIFD()">Fetch from BOM</button>
+        <button class="btn-sec" onclick="toggleIfdEditor()">Edit / Paste CSV</button>
+      </span>
+    </div>
+    <div id="fetchStatus" style="font-size:11px;margin-bottom:8px"></div>
+    <div id="ifdEditor" class="hidden" style="margin-bottom:12px">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Paste BOM IFD data below — accepts <strong style="color:var(--text2)">JSON</strong> (from BOM API, depths auto-converted to intensities), <strong style="color:var(--text2)">BOM CSV</strong> (depth format with "Duration in min" column), or <strong style="color:var(--text2)">intensity CSV</strong>. Or <a id="bomLink" target="_blank" rel="noopener noreferrer">download from BOM →</a></div>
+      <textarea id="ifdCsv" rows="10"></textarea>
+      <button class="btn" style="margin-top:6px" onclick="applyPastedCsv()">Apply</button>
+    </div>
+    <div class="ifd-scroll" id="ifdTableWrap"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Catchment Parameters</div>
+    <div class="formula">C₁₀ = 0.9 × f<sub>i</sub> + C<sub>perv</sub> × (1 − f<sub>i</sub>)  |  C<sub>y</sub> = F<sub>y</sub> × C₁₀  |  Q = C<sub>y</sub> × I × A / 360</div>
+    <div class="params-row">
+      <div class="param"><span class="lbl">Time of concentration (t<sub>c</sub>)</span><input type="number" id="tc" min="1" max="1440" step="1" style="width:80px"><span class="unit">min</span></div>
+      <div class="param">
+        <span class="lbl">Pervious C (C<sub>perv</sub>)</span>
+        <select id="soilType" onchange="applySoilType()">
+          <option value="">Custom</option>
+          <option value="0.05">Sandy, flat &lt;1% (0.05)</option>
+          <option value="0.10">Sandy, moderate 1–5% (0.10)</option>
+          <option value="0.15">Sandy, steep &gt;5% (0.15)</option>
+          <option value="0.13">Clay, flat &lt;1% (0.13)</option>
+          <option value="0.17">Clay, moderate 1–5% (0.17)</option>
+          <option value="0.25">Clay, steep &gt;5% (0.25)</option>
+          <option value="0.20">Parks / gardens (0.20)</option>
+        </select>
+        <input type="number" id="cPerv" min="0" max="0.5" step="0.01" style="width:70px">
+      </div>
+    </div>
+    <div class="params-row" style="margin-top:4px">
+      <div class="param"><span class="lbl">Climate change factor (2100)</span><input type="number" id="ccFactor" min="1.0" max="2.0" step="0.05" style="width:80px"><span class="unit">× 1% AEP intensity</span></div>
+    </div>
+  </div>
+  <div class="columns">
+    <div class="col-card existing">
+      <div class="col-title ex">Existing / Undeveloped</div>
+      <div class="param"><span class="lbl" style="min-width:100px">f<sub>i</sub> (impervious)</span><input type="number" id="fiEx" min="0" max="1" step="0.01" style="width:70px"></div>
+      <input type="range" class="ex" id="fiExSlider" min="0" max="1" step="0.01">
+      <div class="c10-line" id="exC10Line"></div>
+      <div style="overflow-x:auto"><table id="exTable"></table></div>
+      <div class="summary-box ex" id="exSummary"></div>
+    </div>
+    <div class="col-card developed">
+      <div class="col-title dev">Developed / Post-Development</div>
+      <div class="param"><span class="lbl" style="min-width:100px">f<sub>i</sub> (impervious)</span><input type="number" id="fiDev" min="0" max="1" step="0.01" style="width:70px"></div>
+      <input type="range" class="dev" id="fiDevSlider" min="0" max="1" step="0.01">
+      <div class="c10-line" id="devC10Line"></div>
+      <div style="overflow-x:auto"><table id="devTable"></table></div>
+      <div class="summary-box dev" id="devSummary"></div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:4px">
+    <div class="card-title">Comparison Summary — Increase in Peak Runoff</div>
+    <div style="overflow-x:auto"><table id="compTable"></table></div>
+  </div>
+
+  <!-- DETENTION -->
+  <div id="detSection">
+    <label class="check-toggle">
+      <input type="checkbox" id="detEnabled" onchange="recalc()">
+      <span style="font:700 14px var(--font-sans);color:var(--tank)">Enable Detention Tank Analysis</span>
+    </label>
+    <div id="detContent" class="hidden">
+      <div class="det-section">
+        <div class="det-title">🛢 On-Site Detention Analysis</div>
+        <div class="det-sub">Modified Puls level-pool routing · Orifice outlets · Non-worsening assessment</div>
+        <div class="det-grid">
+          <div class="det-card">
+            <div class="det-card-title">Catchment Split</div>
+            <div class="formula" style="margin-bottom:10px">Roof → Tank &nbsp;|&nbsp; Bypass = Site − Roof (at-grade runoff)</div>
+            <div class="param"><span class="lbl" style="min-width:140px">Roof area</span><input type="number" id="roofArea" min="0" style="width:90px"><span class="unit">m²</span></div>
+            <div class="param"><span class="lbl" style="min-width:140px">Bypass f<sub>i</sub></span><input type="number" id="bypassFi" min="0" max="1" step="0.01" style="width:70px"></div>
+            <div class="c10-line" id="bypassInfo" style="margin-top:6px"></div>
+          </div>
+          <div class="det-card">
+            <div class="det-card-title">Tank Geometry</div>
+            <div class="formula" style="margin-bottom:10px">Stage-storage: linear &nbsp; S(h) = V<sub>total</sub> × h / H</div>
+            <div class="param"><span class="lbl" style="min-width:140px">Tank volume</span><input type="number" id="tankVol" min="0" step="0.1" style="width:90px"><span class="unit">m³</span></div>
+            <div class="param"><span class="lbl" style="min-width:140px">Tank height</span><input type="number" id="tankH" min="0.1" step="0.05" style="width:90px"><span class="unit">m</span></div>
+            <div class="param"><span class="lbl" style="min-width:140px">Overflow width</span><input type="number" id="ovrWidth" min="0" step="0.05" style="width:90px"><span class="unit">m</span></div>
+          </div>
+          <div class="det-card" style="grid-column:1/-1">
+            <div class="det-card-title">Orifice Outlets (C<sub>d</sub> = 0.6)</div>
+            <div class="outlet-row" style="margin-bottom:4px">
+              <div></div><div class="outlet-label">Diameter (mm)</div><div class="outlet-label">Invert Height (m)</div><div class="outlet-label">Status</div>
+            </div>
+            <div class="outlet-row"><div class="outlet-num">1</div><input type="number" id="o1d" min="0" step="5" style="width:100%"><input type="number" id="o1h" min="0" step="0.01" style="width:100%"><span class="unit" id="o1info">—</span></div>
+            <div class="outlet-row"><div class="outlet-num">2</div><input type="number" id="o2d" min="0" step="5" style="width:100%"><input type="number" id="o2h" min="0" step="0.01" style="width:100%"><span class="unit" id="o2info">—</span></div>
+            <div class="outlet-row"><div class="outlet-num">3</div><input type="number" id="o3d" min="0" step="5" style="width:100%"><input type="number" id="o3h" min="0" step="0.01" style="width:100%"><span class="unit" id="o3info">—</span></div>
+            <div style="font-size:10px;color:var(--text5);margin-top:8px">Head reference: centre of orifice (invert + D/2). Overflow: broad-crested weir at tank top.</div>
+          </div>
+        </div>
+        <div class="det-card" style="margin-top:16px">
+          <div class="det-card-title">Design Storm Duration</div>
+          <div class="formula">t<sub>c</sub> (Pilgrim & McDermott) = 0.76 × A<sup>0.38</sup> (hours, A in km²) &nbsp;|&nbsp; Storm duration = max(5 min, t<sub>c,PM</sub>)</div>
+          <label class="check-toggle" style="margin-top:8px;margin-bottom:4px"><input type="checkbox" id="tcOverride5" onchange="recalc()"><span>Override storm duration to 5 minutes</span></label>
+          <div id="stormInfo" style="font-size:12px;color:var(--text);margin-top:6px"></div>
+        </div>
+        <div class="det-card" style="margin-top:16px">
+          <div class="det-card-title">Routing Results — Non-Worsening Assessment</div>
+          <div class="det-result-grid" id="detResultGrid"></div>
+          <div style="overflow-x:auto;margin-top:8px"><table id="detResultTable"></table></div>
+        </div>
+        <div class="canvas-wrap" style="margin-top:16px">
+          <div class="canvas-label">Hydrograph — 1% AEP</div>
+          <canvas id="hydroChart"></canvas>
+          <div class="legend">
+            <div class="legend-item"><div class="legend-swatch" style="background:var(--existing)"></div>Existing Site (dashed)</div>
+            <div class="legend-item"><div class="legend-swatch" style="background:var(--tank)"></div>Tank Inflow (Roof)</div>
+            <div class="legend-item"><div class="legend-swatch" style="background:var(--bypass)"></div>Tank Outflow</div>
+            <div class="legend-item"><div class="legend-swatch" style="background:var(--developed);height:3px"></div>Tank Outflow + Bypass</div>
+          </div>
+        </div>
+        <div class="canvas-wrap">
+          <div class="canvas-label">Stage — Discharge Rating Curve</div>
+          <canvas id="stageChart"></canvas>
+          <div class="legend">
+            <div class="legend-item"><div class="legend-swatch" style="background:var(--tank)"></div>Orifices</div>
+            <div class="legend-item"><div class="legend-swatch" style="background:#ef4444"></div>Overflow</div>
+            <div class="legend-item"><div class="legend-swatch" style="background:var(--cyan)"></div>Total</div>
+          </div>
+        </div>
+
+        <!-- OPTIMISER -->
+        <div class="det-card" id="optimiserCard" style="margin-top:16px;border-color:#a78bfa44">
+          <div class="det-card-title" style="color:var(--tank)">⚡ Tank Size Optimiser — Find Minimum Non-Worsening Volume</div>
+          <div class="formula" style="margin-bottom:10px">Iterates all combinations of volume × height × outlet diameters. Outlet inverts held at current values. Uses current storm duration setting.</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div>
+              <div class="outlet-label" style="margin-bottom:4px">Candidate volumes (m³, comma-separated)</div>
+              <input type="text" id="optVols" value="2,2.5,3,5,10,12,19,22.7,30" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--cyan);padding:6px 10px;font:12px var(--font-mono);outline:none" placeholder="e.g. 2,3,4,5,6,8,10">
+            </div>
+            <div>
+              <div class="outlet-label" style="margin-bottom:4px">Candidate heights (m, comma-separated)</div>
+              <input type="text" id="optHeights" value="1.83,1.92,1.95,1.98,2.10,2.15,2.17,2.28,2.60,3.32" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--cyan);padding:6px 10px;font:12px var(--font-mono);outline:none" placeholder="e.g. 0.6,0.8,1.0,1.2,1.5">
+            </div>
+          </div>
+          <div style="margin-top:10px">
+            <div class="outlet-label" style="margin-bottom:4px">Candidate outlet diameters (mm, comma-separated — applied to each active outlet independently)</div>
+            <input type="text" id="optDiams" value="30,35,40,45,50,55,60,65,70,75,80,90,100,125,150,225,300" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--cyan);padding:6px 10px;font:12px var(--font-mono);outline:none" placeholder="e.g. 25,32,40,50,65,80,100">
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:12px">
+            <button class="btn" onclick="runOptimiser()" style="background:var(--tank)">Run Optimiser</button>
+            <span id="optStatus" style="font-size:11px;color:var(--text3)"></span>
+          </div>
+          <div id="optResult" style="margin-top:12px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card notes-card">
+    <div class="inner">
+      <strong>Notes:</strong><br>
+      • Rational Method per QUDM: Q = C<sub>y</sub> · I · A / 360 (Q in m³/s, I in mm/hr, A in ha)<br>
+      • C₁₀ = 0.9 · f<sub>i</sub> + C<sub>perv</sub> · (1 − f<sub>i</sub>) with C<sub>y</sub> = F<sub>y</sub> · C₁₀ ≤ 0.9<br>
+      • Frequency factors from QUDM Table 5.05 (F<sub>y</sub> relative to 10% AEP)<br>
+      • 1% AEP 2100: current 1% AEP intensity × <span id="ccNoteVal">1.20</span> climate change factor<br>
+      • IFD intensities interpolated using log-log method between standard durations
+      <span id="detNotes" class="hidden"><br>
+      • Detention: Modified Puls level-pool routing with triangular inflow hydrograph (t<sub>base</sub> = 2 × storm duration)<br>
+      • <strong>Modified Puls:</strong> (2S<sub>n+1</sub>/Δt + O<sub>n+1</sub>) = (I<sub>n</sub> + I<sub>n+1</sub>) + (2S<sub>n</sub>/Δt − O<sub>n</sub>) — iteratively solve for stage, storage & outflow at each time step using the stage-storage-discharge relationship<br>
+      • Orifice: Q = C<sub>d</sub>·A·√(2g·h<sub>eff</sub>), C<sub>d</sub> = 0.6, h<sub>eff</sub> from water level to orifice centre<br>
+      • Overflow: Q = 1.7·L·(h − H)<sup>1.5</sup> broad-crested weir at tank height<br>
+      • Non-worsening: total site outflow (tank discharge + bypass) ≤ existing site peak flow<br>
+      • Pilgrim & McDermott: t<sub>c</sub> = 0.76·A<sup>0.38</sup> (hrs, A in km²) for storm duration
+      </span>
+    </div>
+  </div>
+  <div class="footer">Stormwater Rational Method Estimator v2.0 — For preliminary estimation only</div>
+</div>
+
+<script>
+const G=9.81, CD_ORIFICE=0.6, CD_WEIR=1.7;
+const FF=[
+  {aep:"63.2%",label:"1 EY",fy:0.80,key:"1EY"},
+  {aep:"50%",label:"50% AEP",fy:0.85,key:"50"},
+  {aep:"20%",label:"20% AEP",fy:0.90,key:"20"},
+  {aep:"10%",label:"10% AEP",fy:1.00,key:"10"},
+  {aep:"5%",label:"5% AEP",fy:1.05,key:"5"},
+  {aep:"2%",label:"2% AEP",fy:1.15,key:"2"},
+  {aep:"1%",label:"1% AEP",fy:1.20,key:"1"},
+];
+const SAMPLE_CSV=`Duration,1 EY,50% AEP,20% AEP,10% AEP,5% AEP,2% AEP,1% AEP
+1 min,88.5,105.0,133.0,157.0,181.0,214.0,241.0
+2 min,78.2,93.4,119.0,141.0,163.0,194.0,219.0
+3 min,71.6,85.7,110.0,130.0,151.0,180.0,203.0
+4 min,66.5,79.8,103.0,122.0,142.0,169.0,191.0
+5 min,62.3,74.8,96.8,115.0,134.0,160.0,181.0
+10 min,47.0,56.8,74.4,89.0,104.0,125.0,142.0
+15 min,38.4,46.6,61.4,73.8,86.6,105.0,119.0
+20 min,33.0,40.0,53.0,63.8,75.0,91.0,104.0
+25 min,29.2,35.4,47.0,56.8,66.8,81.4,93.2
+30 min,26.2,31.8,42.4,51.2,60.4,73.6,84.6
+45 min,20.4,24.8,33.2,40.4,47.8,58.6,67.4
+1 hour,17.0,20.6,27.6,33.6,39.8,49.0,56.6
+1.5 hours,12.8,15.6,21.0,25.6,30.4,37.6,43.4
+2 hours,10.4,12.6,17.0,20.8,24.8,30.8,35.6
+3 hours,7.80,9.52,12.9,15.8,18.9,23.5,27.3
+6 hours,4.72,5.78,7.90,9.72,11.7,14.6,17.0
+12 hours,2.86,3.52,4.84,5.98,7.22,9.08,10.6
+24 hours,1.72,2.12,2.96,3.68,4.48,5.68,6.68
+48 hours,1.02,1.27,1.79,2.24,2.74,3.50,4.14
+72 hours,0.74,0.92,1.30,1.64,2.02,2.58,3.06`;
+
+let ifd=null,ifdSource="sample",lastDetResults=null;
+const $=id=>document.getElementById(id);
+
+/* ── IFD ── */
+function parseDur(t){t=t.trim().toLowerCase();return t.includes("hour")?parseFloat(t)*60:parseFloat(t)}
+
+// Extract CSV from BOM JSON if pasted data is JSON with a "csv" field
+function extractCsvFromInput(raw){
+  const trimmed=raw.trim();
+  if(trimmed.startsWith("{")){
+    try{
+      const obj=JSON.parse(trimmed);
+      if(obj.csv)return{csv:obj.csv.replace(/\\r\\n/g,"\n").replace(/\r\n/g,"\n").replace(/\r/g,"\n"),isBomJson:true};
+    }catch(e){}
+  }
+  return{csv:trimmed,isBomJson:false};
+}
+
+// Detect if BOM depth format: has "Duration in min" column
+function isBomDepthFormat(headerLine){
+  return headerLine.toLowerCase().includes("duration in min");
+}
+
+function parseIFD(raw){
+  const{csv}=extractCsvFromInput(raw);
+  const lines=csv.split("\n").map(l=>l.replace(/"/g,"").trim()).filter(Boolean);
+
+  // Find header row containing Duration + (AEP or EY)
+  let hi=lines.findIndex(l=>{const lc=l.toLowerCase();return lc.includes("duration")&&(l.includes("AEP")||l.includes("EY"))});
+  if(hi<0)hi=0;
+
+  const hdrs=lines[hi].split(",").map(s=>s.trim());
+  const bomDepth=isBomDepthFormat(lines[hi]);
+
+  // For BOM depth format: columns are Duration, Duration in min, then AEP columns
+  // For intensity format: columns are Duration, then AEP columns
+  let durMinCol=-1, dataStartCol=1;
+  if(bomDepth){
+    durMinCol=hdrs.findIndex(h=>h.toLowerCase().includes("duration in min"));
+    dataStartCol=Math.max(durMinCol+1,2); // AEP data starts after "Duration in min"
+  }
+
+  const aK=hdrs.slice(dataStartCol);
+  const durs=[],ints={};
+  aK.forEach(k=>ints[k]={});
+
+  for(let i=hi+1;i<lines.length;i++){
+    const p=lines[i].split(",").map(s=>s.trim());
+    if(p.length<dataStartCol+1)continue;
+
+    // Get duration in minutes
+    let d;
+    if(bomDepth && durMinCol>=0){
+      d=parseFloat(p[durMinCol]);
+    }else{
+      d=parseDur(p[0]);
+    }
+    if(isNaN(d)||d<=0)continue;
+    durs.push(d);
+
+    const durHrs=d/60;
+    for(let j=dataStartCol;j<p.length&&(j-dataStartCol)<aK.length;j++){
+      const v=parseFloat(p[j]);
+      if(isNaN(v))continue;
+      if(bomDepth){
+        // Convert depth (mm) to intensity (mm/hr)
+        ints[aK[j-dataStartCol]][d]=v/durHrs;
+      }else{
+        ints[aK[j-dataStartCol]][d]=v;
+      }
+    }
+  }
+  return{durations:durs.sort((a,b)=>a-b),aepKeys:aK,intensities:ints,isBomDepth:bomDepth}
+}
+
+function interpI(durs,iMap,tc){
+  if(tc<=0)return 0;const mn=durs[0],mx=durs[durs.length-1];
+  if(tc<=mn)return iMap[mn]||0;if(tc>=mx)return iMap[mx]||0;
+  let lo=mn,hi=mx;for(let i=0;i<durs.length-1;i++){if(durs[i]<=tc&&durs[i+1]>=tc){lo=durs[i];hi=durs[i+1];break}}
+  const iL=iMap[lo],iH=iMap[hi];if(!iL||!iH)return iL||iH||0;if(lo===hi)return iL;
+  return Math.exp(Math.log(iL)+(Math.log(iH)-Math.log(iL))*(Math.log(tc)-Math.log(lo))/(Math.log(hi)-Math.log(lo)))
+}
+function matchCol(keys,fk){
+  // Precise matching for each frequency factor key to BOM IFD column headers
+  // BOM format has: 12EY,6EY,4EY,3EY,2EY,63.2%,50%,0.5EY,20%,0.2EY,10%,5%,2%,1%,1 in 200,...
+  const exact={
+    "1EY":k=>/^63\.2%?$/i.test(k.trim())||/^1\s*ey$/i.test(k.trim()),
+    "50":k=>/^50%?$/i.test(k.trim())||/^0\.5\s*ey$/i.test(k.trim())||/^50%\s*aep$/i.test(k.trim()),
+    "20":k=>/^20%?$/i.test(k.trim())||/^20%\s*aep$/i.test(k.trim()),
+    "10":k=>/^10%?$/i.test(k.trim())||/^0\.1\s*ey$/i.test(k.trim())||/^10%\s*aep$/i.test(k.trim()),
+    "5":k=>/^5%?$/i.test(k.trim())||/^5%\s*aep$/i.test(k.trim()),
+    "2":k=>/^2%?$/i.test(k.trim())||/^2%\s*aep$/i.test(k.trim()),
+    "1":k=>/^1%?$/i.test(k.trim())||/^1%\s*aep$/i.test(k.trim()),
+  };
+  const fn=exact[fk];if(!fn)return null;
+  return keys.find(fn)||null;
+}
+function toggleIfdEditor(){$("ifdEditor").classList.toggle("hidden")}
+function applyPastedCsv(){
+  try{
+    const raw=$("ifdCsv").value;
+    const{isBomJson}=extractCsvFromInput(raw);
+    ifd=parseIFD(raw);
+    ifdSource="pasted";
+    const fmt=isBomJson?"BOM JSON (depths → intensities)":ifd.isBomDepth?"BOM CSV (depths → intensities)":"intensity CSV";
+    $("fetchStatus").innerHTML=`✓ Parsed as ${fmt} — ${ifd.durations.length} durations × ${ifd.aepKeys.length} AEPs`;
+    $("fetchStatus").style.color="var(--green)";
+    $("ifdEditor").classList.add("hidden");
+    recalc()
+  }catch(e){
+    $("fetchStatus").textContent="✗ Could not parse — check format";
+    $("fetchStatus").style.color="var(--amber)";
+  }
+}
+async function fetchIFD(){
+  $("fetchStatus").textContent="Fetching...";$("fetchStatus").style.color="var(--text3)";
+  try{const u=buildBomUrl();const r=await fetch(u);if(!r.ok)throw 0;const t=await r.text();$("ifdCsv").value=t;ifd=parseIFD(t);ifdSource="bom";$("fetchStatus").innerHTML="✓ Loaded from BOM";$("fetchStatus").style.color="var(--green)";recalc()}
+  catch(e){$("fetchStatus").innerHTML=`✗ CORS blocked — paste CSV or JSON below, or <a href="${buildBomUrl()}" target="_blank" style="color:var(--cyan)">download manually →</a>`;$("fetchStatus").style.color="var(--amber)"}
+}
+function buildBomUrl(){return`https://www.bom.gov.au/water/designRainfalls/revised-ifd/services/downloadtable?all_design=&input_type=dd&points=${encodeURIComponent(JSON.stringify({points:[[parseFloat($("lat").value),parseFloat($("lng").value)]]}))}`}
+function updateBomLink(){const e=$("bomLink");if(e)e.href=buildBomUrl()}
+
+/* ── Rational Method ── */
+function calcRM(fi,cPerv,tc,aHa){
+  if(!ifd)return[];const c10=Math.min(0.9,0.9*fi+cPerv*(1-fi));
+  return FF.map(ff=>{const cy=Math.min(0.9,ff.fy*c10);const col=matchCol(ifd.aepKeys,ff.key);let I=0;if(col&&ifd.intensities[col])I=interpI(ifd.durations,ifd.intensities[col],tc);return{...ff,c10,cy,intensity:I,Q:(cy*I*aHa)/360}})
+}
+function renderRT(el,res,d2100,ac,ccF){
+  const cf=ccF||1.2;
+  let h=`<thead><tr><th>AEP</th><th>Fy</th><th>Cy</th><th class="r">I (mm/hr)</th><th class="r">Q (m³/s)</th><th class="r">Q (L/s)</th></tr></thead><tbody>`;
+  res.forEach(r=>{h+=`<tr${r.key==="1"?' class="hl"':''}><td>${r.label}</td><td>${r.fy.toFixed(2)}</td><td>${r.cy.toFixed(3)}</td><td class="r">${r.intensity.toFixed(1)}</td><td class="r ${ac}">${r.Q.toFixed(4)}</td><td class="r ${ac}">${(r.Q*1000).toFixed(1)}</td></tr>`});
+  if(d2100)h+=`<tr class="cc"><td>1% 2100</td><td>${cf.toFixed(2)}</td><td>${d2100.cy.toFixed(3)}</td><td class="r">${d2100.intensity.toFixed(1)}</td><td class="r">${d2100.Q.toFixed(4)}</td><td class="r">${(d2100.Q*1000).toFixed(1)}</td></tr>`;
+  el.innerHTML=h+'</tbody>'
+}
+
+/* ── Detention Hydraulics ── */
+function orifQ(wh,inv,d){if(d<=0)return 0;const he=wh-(inv+d/2);return he<=0?0:CD_ORIFICE*(Math.PI/4*d*d)*Math.sqrt(2*G*he)}
+function ovrQ(wh,tH,wW){if(wW<=0||wh<=tH)return 0;return CD_WEIR*wW*Math.pow(wh-tH,1.5)}
+function totalQ(h,outs,tH,wW){let qo=0;outs.forEach(o=>qo+=orifQ(h,o.inv,o.d));const qv=ovrQ(h,tH,wW);return{qo,qv,qt:qo+qv}}
+function stageStore(h,V,H){return H<=0?0:V*Math.min(h,H)/H}
+
+function triHydro(Qp,tcS,dt){
+  const tb=2*tcS,n=Math.ceil(tb/dt)+1,out=[];
+  for(let i=0;i<=n;i++){const t=i*dt;let q=0;if(t<=tcS)q=Qp*(t/tcS);else if(t<=tb)q=Qp*(1-(t-tcS)/tcS);out.push({t,q:Math.max(0,q)})}return out
+}
+
+function modPuls(inflow,dt,V,H,outs,wW){
+  const mxH=H*1.5,dh=mxH/300,lk=[];
+  for(let i=0;i<=300;i++){const h=i*dh;const S=stageStore(h,V,H);const{qt}=totalQ(h,outs,H,wW);lk.push({h,S,O:qt,v:2*S/dt+qt})}
+  function find(tv){if(tv<=lk[0].v)return{h:0,O:0};for(let i=1;i<lk.length;i++){if(lk[i].v>=tv){const f=(tv-lk[i-1].v)/(lk[i].v-lk[i-1].v);return{h:lk[i-1].h+f*(lk[i].h-lk[i-1].h),O:lk[i-1].O+f*(lk[i].O-lk[i-1].O)}}}return{h:lk[lk.length-1].h,O:lk[lk.length-1].O}}
+  const res=[{t:inflow[0].t,h:0,O:0,S:0,I:inflow[0].q}];let prev=0;
+  for(let n=0;n<inflow.length-1;n++){
+    const aI=(inflow[n].q+inflow[n+1].q)/2;const tv=prev+2*aI;
+    if(tv<=0){res.push({t:inflow[n+1].t,h:0,O:0,S:0,I:inflow[n+1].q});prev=0;continue}
+    const{h,O}=find(tv);const S=stageStore(h,V,H);prev=2*S/dt-O;if(prev<0)prev=0;
+    res.push({t:inflow[n+1].t,h,O,S,I:inflow[n+1].q})
+  }return res
+}
+
+function runDet(ff,aI,rHa,bHa,bCy,V,H,outs,wW,sdMin){
+  const rCy=Math.min(0.9,ff.fy*0.9);const Qp=(rCy*aI*rHa)/360;
+  const tcS=sdMin*60,dt=Math.max(1,Math.min(5,tcS/80));
+  const inflow=triHydro(Qp,tcS,dt);const routing=modPuls(inflow,dt,V,H,outs,wW);
+  const pO=Math.max(...routing.map(r=>r.O));const mS=Math.max(...routing.map(r=>r.h));const mV=Math.max(...routing.map(r=>r.S));
+  const bP=(bCy*aI*bHa)/360;
+  return{ff,aI,Qp,pO,bP,totP:pO+bP,mS,mV,routing,inflow,rCy}
+}
+
+/* ── Canvas Charts ── */
+function drawHydro(cid,rout,exPk,bpPk,sdMin){
+  const c=$(cid),dpr=window.devicePixelRatio||1,rect=c.getBoundingClientRect();
+  c.width=rect.width*dpr;c.height=280*dpr;
+  const ctx=c.getContext("2d");ctx.scale(dpr,dpr);
+  const W=rect.width,H=280,p={t:20,r:20,b:36,l:56},pw=W-p.l-p.r,ph=H-p.t-p.b;
+  ctx.fillStyle="#0d1520";ctx.fillRect(0,0,W,H);
+  if(!rout||rout.length<2)return;
+  const mxT=rout[rout.length-1].t;
+  const peakInflow=Math.max(...rout.map(r=>r.I));
+  // Build combined outflow+bypass series
+  const combSeries=rout.map(r=>{
+    // Bypass follows a triangular shape proportional to inflow timing
+    const bpFrac=peakInflow>0?r.I/peakInflow:0;
+    return r.O+bpPk*bpFrac;
+  });
+  const mxQ=Math.max(exPk*1.15,peakInflow*1.1,Math.max(...combSeries)*1.1,0.001);
+  const tx=t=>p.l+(t/mxT)*pw, ty=q=>p.t+ph-(q/mxQ)*ph;
+
+  // Grid
+  ctx.strokeStyle="#1a2d47";ctx.lineWidth=.5;
+  for(let i=0;i<=5;i++){const y=p.t+(i/5)*ph;ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(p.l+pw,y);ctx.stroke()}
+
+  // Existing peak line
+  ctx.strokeStyle="#22d3ee55";ctx.lineWidth=1;ctx.setLineDash([6,4]);
+  ctx.beginPath();ctx.moveTo(p.l,ty(exPk));ctx.lineTo(p.l+pw,ty(exPk));ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle="#22d3ee";ctx.font="10px "+getComputedStyle(document.body).fontFamily;
+  ctx.textAlign="left";ctx.fillText("Existing "+(exPk*1000).toFixed(1)+" L/s",p.l+4,ty(exPk)-4);
+
+  // Tank inflow
+  ctx.strokeStyle="#a78bfa";ctx.lineWidth=1.5;ctx.beginPath();
+  rout.forEach((r,i)=>{i===0?ctx.moveTo(tx(r.t),ty(r.I)):ctx.lineTo(tx(r.t),ty(r.I))});ctx.stroke();
+
+  // Tank outflow
+  ctx.strokeStyle="#fb923c";ctx.lineWidth=1.5;ctx.beginPath();
+  rout.forEach((r,i)=>{i===0?ctx.moveTo(tx(r.t),ty(r.O)):ctx.lineTo(tx(r.t),ty(r.O))});ctx.stroke();
+
+  // Combined (tank out + bypass)
+  ctx.strokeStyle="#bada55";ctx.lineWidth=2;ctx.beginPath();
+  rout.forEach((r,i)=>{const q=combSeries[i];i===0?ctx.moveTo(tx(r.t),ty(q)):ctx.lineTo(tx(r.t),ty(q))});ctx.stroke();
+
+  // Axes
+  ctx.strokeStyle="#1e3a5f";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(p.l,p.t);ctx.lineTo(p.l,p.t+ph);ctx.lineTo(p.l+pw,p.t+ph);ctx.stroke();
+  ctx.fillStyle="#4a6fa5";ctx.font="10px "+getComputedStyle(document.body).fontFamily;ctx.textAlign="center";
+  for(let i=0;i<=5;i++){ctx.fillText(((i/5)*mxT/60).toFixed(1)+"m",tx((i/5)*mxT),H-p.b+14)}
+  ctx.textAlign="right";for(let i=0;i<=5;i++){ctx.fillText(((i/5)*mxQ*1000).toFixed(1),p.l-6,ty((i/5)*mxQ)+3)}
+  ctx.save();ctx.translate(14,p.t+ph/2);ctx.rotate(-Math.PI/2);ctx.textAlign="center";ctx.fillText("Flow (L/s)",0,0);ctx.restore();
+  ctx.textAlign="center";ctx.fillText("Time (min)",p.l+pw/2,H-4);
+}
+
+function drawStageDisch(cid,tH,outs,wW){
+  const c=$(cid),dpr=window.devicePixelRatio||1,rect=c.getBoundingClientRect();
+  c.width=rect.width*dpr;c.height=280*dpr;
+  const ctx=c.getContext("2d");ctx.scale(dpr,dpr);
+  const W=rect.width,H=280,p={t:20,r:20,b:36,l:56},pw=W-p.l-p.r,ph=H-p.t-p.b;
+  ctx.fillStyle="#0d1520";ctx.fillRect(0,0,W,H);if(tH<=0)return;
+  const mxH=tH*1.3,nP=100,pts=[];let mxQ=0.001;
+  for(let i=0;i<=nP;i++){const h=(i/nP)*mxH;const d=totalQ(h,outs,tH,wW);pts.push({h,...d});if(d.qt>mxQ)mxQ=d.qt}mxQ*=1.1;
+  const tx=q=>p.l+(q/mxQ)*pw, ty=h=>p.t+ph-(h/mxH)*ph;
+  ctx.strokeStyle="#1a2d47";ctx.lineWidth=.5;for(let i=0;i<=5;i++){const y=p.t+(i/5)*ph;ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(p.l+pw,y);ctx.stroke()}
+  ctx.strokeStyle="#4a6fa533";ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(p.l,ty(tH));ctx.lineTo(p.l+pw,ty(tH));ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle="#4a6fa5";ctx.font="9px "+getComputedStyle(document.body).fontFamily;ctx.textAlign="left";ctx.fillText("Tank top",p.l+pw-44,ty(tH)-4);
+
+  ctx.strokeStyle="#a78bfa";ctx.lineWidth=1.5;ctx.beginPath();pts.forEach((q,i)=>{i===0?ctx.moveTo(tx(q.qo),ty(q.h)):ctx.lineTo(tx(q.qo),ty(q.h))});ctx.stroke();
+  ctx.strokeStyle="#ef4444";ctx.lineWidth=1.5;ctx.beginPath();let st=false;pts.forEach(q=>{if(q.qv>0){if(!st){ctx.moveTo(tx(q.qv),ty(q.h));st=true}else ctx.lineTo(tx(q.qv),ty(q.h))}});ctx.stroke();
+  ctx.strokeStyle="#06b6d4";ctx.lineWidth=2;ctx.beginPath();pts.forEach((q,i)=>{i===0?ctx.moveTo(tx(q.qt),ty(q.h)):ctx.lineTo(tx(q.qt),ty(q.h))});ctx.stroke();
+
+  ctx.strokeStyle="#1e3a5f";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(p.l,p.t);ctx.lineTo(p.l,p.t+ph);ctx.lineTo(p.l+pw,p.t+ph);ctx.stroke();
+  ctx.fillStyle="#4a6fa5";ctx.font="10px "+getComputedStyle(document.body).fontFamily;ctx.textAlign="center";
+  for(let i=0;i<=5;i++){ctx.fillText(((i/5)*mxQ*1000).toFixed(1),tx((i/5)*mxQ),H-p.b+14)}
+  ctx.textAlign="right";for(let i=0;i<=5;i++){ctx.fillText(((i/5)*mxH).toFixed(2),p.l-6,ty((i/5)*mxH)+3)}
+  ctx.save();ctx.translate(14,p.t+ph/2);ctx.rotate(-Math.PI/2);ctx.textAlign="center";ctx.fillText("Stage (m)",0,0);ctx.restore();
+  ctx.textAlign="center";ctx.fillText("Discharge (L/s)",p.l+pw/2,H-4);
+}
+
+/* ══════════════════════ OPTIMISER ══════════════════════ */
+function parseList(s){return s.split(",").map(v=>parseFloat(v.trim())).filter(v=>!isNaN(v)&&v>0)}
+
+function runOptimiser(){
+  if(!ifd||!$("detEnabled").checked){$("optStatus").textContent="Enable detention first";return}
+
+  const candVols=parseList($("optVols").value).sort((a,b)=>a-b);
+  const candHeights=parseList($("optHeights").value);
+  const candDiams=parseList($("optDiams").value);
+  if(!candVols.length||!candHeights.length||!candDiams.length){
+    $("optStatus").textContent="✗ Enter candidate values for volumes, heights, and diameters";$("optStatus").style.color="var(--amber)";return}
+
+  // Read current parameters
+  const aSqm=+$("area").value||0, aHa=aSqm/10000, cP=+$("cPerv").value||0;
+  const fiEx=+$("fiEx").value||0, rA=+$("roofArea").value||0, bFi=+$("bypassFi").value||0;
+  const wW=+$("ovrWidth").value||0;
+  const bSqm=Math.max(0,aSqm-rA), bHa=bSqm/10000, rHa=rA/10000;
+  const bC10=Math.min(0.9,0.9*bFi+cP*(1-bFi));
+  const eC10=Math.min(0.9,0.9*fiEx+cP*(1-fiEx));
+
+  // Storm duration
+  const aKm2=aSqm/1e6, tcPM=0.76*Math.pow(Math.max(aKm2,1e-6),0.38)*60;
+  const tcOvr=$("tcOverride5").checked;
+  const sd=tcOvr?5:Math.max(5,tcPM);
+
+  // Outlet inverts from current inputs
+  const inverts=[+$("o1h").value||0, +$("o2h").value||0, +$("o3h").value||0];
+  // Which outlets are active (diameter > 0 in current config)
+  const activeSlots=[(+$("o1d").value||0)>0, (+$("o2d").value||0)>0, (+$("o3d").value||0)>0];
+  const numActive=activeSlots.filter(Boolean).length;
+  if(numActive===0){$("optStatus").textContent="✗ Enable at least one outlet first";$("optStatus").style.color="var(--amber)";return}
+
+  // Build AEPs to check (all standard + 2100)
+  const allAep=[...FF,{aep:"1% 2100",label:"1% AEP 2100",fy:1.20,key:"1_2100"}];
+
+  // Precompute existing peaks & intensities for each AEP at storm duration
+  const aepData=allAep.map(ff=>{
+    let aI;
+    if(ff.key==="1_2100"){const c=matchCol(ifd.aepKeys,"1");aI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd)*1.2:0}
+    else{const c=matchCol(ifd.aepKeys,ff.key);aI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd):0}
+    let eCy;
+    if(ff.key==="1_2100")eCy=Math.min(0.9,1.2*eC10);else eCy=Math.min(0.9,ff.fy*eC10);
+    let eI;
+    if(ff.key==="1_2100"){const c=matchCol(ifd.aepKeys,"1");eI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd)*1.2:0}
+    else{const c=matchCol(ifd.aepKeys,ff.key);eI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd):0}
+    const ePk=(eCy*eI*aHa)/360;
+    const bCy=Math.min(0.9,ff.fy*bC10);
+    return{ff,aI,ePk,bCy};
+  });
+
+  // Build diameter combos for active outlets
+  // Active outlets get values from candDiams, inactive get 0
+  let diamCombos;
+  if(numActive===1){
+    diamCombos=candDiams.map(d=>{const arr=[0,0,0];const idx=activeSlots.indexOf(true);arr[idx]=d;return arr});
+  }else if(numActive===2){
+    diamCombos=[];
+    for(const d1 of candDiams)for(const d2 of candDiams){
+      const arr=[0,0,0];let ai=0;
+      for(let i=0;i<3;i++){if(activeSlots[i]){arr[i]=ai===0?d1:d2;ai++}}
+      diamCombos.push(arr);
+    }
+  }else{
+    diamCombos=[];
+    for(const d1 of candDiams)for(const d2 of candDiams)for(const d3 of candDiams)diamCombos.push([d1,d2,d3]);
+  }
+
+  const totalCombos=candVols.length*candHeights.length*diamCombos.length;
+  $("optStatus").textContent=`Searching ${totalCombos.toLocaleString()} combinations...`;$("optStatus").style.color="var(--text3)";
+
+  // Use setTimeout to let UI update before heavy compute
+  setTimeout(()=>{
+    let best=null;
+    let checked=0;
+
+    for(const V of candVols){
+      for(const H of candHeights){
+        for(const dc of diamCombos){
+          // Build outlets, clamping inverts to fit within tank
+          const outs=dc.map((dMm,i)=>{
+            const dM=dMm/1000;
+            let inv=inverts[i];
+            if(dM>0 && inv+dM>H) inv=Math.max(0,H-dM);
+            return{d:dM,inv};
+          });
+
+          // Test all AEPs — must ALL pass
+          let allPass=true;
+          for(const ad of aepData){
+            const rCy=Math.min(0.9,ad.ff.fy*0.9);
+            const Qp=(rCy*ad.aI*rHa)/360;
+            const tcS=sd*60, dt=Math.max(1,Math.min(5,tcS/80));
+            const inflow=triHydro(Qp,tcS,dt);
+            const routing=modPuls(inflow,dt,V,H,outs,wW);
+            const pO=Math.max(...routing.map(r=>r.O));
+            const bP=(ad.bCy*ad.aI*bHa)/360;
+            const totP=pO+bP;
+            if(totP>ad.ePk*1.001){allPass=false;break}
+          }
+
+          if(allPass && (!best || V<best.V || (V===best.V && H<best.H))){
+            best={V,H,diams:dc.slice(),outs};
+          }
+          checked++;
+        }
+      }
+      // Skip larger volumes if we already have a solution
+      if(best && V>best.V) break;
+    }
+
+    if(best){
+      // Run full results for display
+      const dispOuts=best.diams.map((dMm,i)=>{
+        const dM=dMm/1000;let inv=inverts[i];if(dM>0&&inv+dM>best.H)inv=Math.max(0,best.H-dM);return{d:dM,inv}});
+      const r1data=aepData.find(a=>a.ff.key==="1");
+      let r1detail=null;
+      if(r1data){
+        const rCy=Math.min(0.9,r1data.ff.fy*0.9);
+        const Qp=(rCy*r1data.aI*rHa)/360;
+        const tcS=sd*60,dt=Math.max(1,Math.min(5,tcS/80));
+        const inflow=triHydro(Qp,tcS,dt);
+        const routing=modPuls(inflow,dt,best.V,best.H,dispOuts,wW);
+        const pO=Math.max(...routing.map(r=>r.O));
+        const mS=Math.max(...routing.map(r=>r.h));
+        const bP=(r1data.bCy*r1data.aI*bHa)/360;
+        r1detail={pO,mS,bP,totP:pO+bP,ePk:r1data.ePk};
+      }
+
+      const diamStr=best.diams.map((d,i)=>activeSlots[i]?`<strong style="color:var(--tank)">${d}mm</strong>`:'—').join(' / ');
+      const invStr=dispOuts.map((o,i)=>activeSlots[i]?`${o.inv.toFixed(2)}m`:'—').join(' / ');
+
+      let html=`<div style="background:var(--bg3);border:1px solid var(--green);border-radius:5px;padding:14px">
+        <div style="font:700 13px var(--font-sans);color:var(--green);margin-bottom:10px">✓ Optimal Solution Found</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px">
+          <div class="det-stat" style="border-color:var(--green)44"><div class="val" style="color:var(--green);font-size:20px">${best.V} m³</div><div class="lbl">Volume</div></div>
+          <div class="det-stat"><div class="val" style="color:var(--tank);font-size:20px">${best.H} m</div><div class="lbl">Height</div></div>
+          <div class="det-stat"><div class="val" style="color:var(--tank);font-size:16px">${diamStr}</div><div class="lbl">Outlets (1 / 2 / 3)</div></div>
+          <div class="det-stat"><div class="val" style="color:var(--text2);font-size:16px">${invStr}</div><div class="lbl">Inverts (clamped)</div></div>`;
+      if(r1detail){
+        html+=`<div class="det-stat"><div class="val" style="color:var(--developed);font-size:18px">${(r1detail.totP*1000).toFixed(1)}</div><div class="lbl">Total Dev (L/s) 1%</div></div>
+          <div class="det-stat"><div class="val" style="color:var(--existing);font-size:18px">${(r1detail.ePk*1000).toFixed(1)}</div><div class="lbl">Existing (L/s) 1%</div></div>
+          <div class="det-stat"><div class="val" style="color:var(--tank);font-size:18px">${r1detail.mS.toFixed(3)}</div><div class="lbl">Max Stage (m) 1%</div></div>`;
+      }
+      html+=`</div><button class="btn" style="background:var(--green)" onclick="applyOptimal(${best.V},${best.H},[${best.diams}])">Apply to Main Inputs</button></div>`;
+      $("optResult").innerHTML=html;
+      $("optStatus").innerHTML=`✓ Searched ${checked.toLocaleString()} combinations`;$("optStatus").style.color="var(--green)";
+    }else{
+      $("optResult").innerHTML=`<div style="background:#ef444418;border:1px solid #ef444444;border-radius:5px;padding:14px;color:#ef4444;font-weight:600">✗ No passing combination found — try larger volumes or bigger outlets</div>`;
+      $("optStatus").innerHTML=`Searched ${checked.toLocaleString()} combinations`;$("optStatus").style.color="var(--amber)";
+    }
+  },50);
+}
+
+function applyOptimal(V,H,diams){
+  $("tankVol").value=V;$("tankH").value=H;
+  if(diams[0]!==undefined)$("o1d").value=diams[0];
+  if(diams[1]!==undefined)$("o2d").value=diams[1];
+  if(diams[2]!==undefined)$("o3d").value=diams[2];
+  recalc();
+}
+
+/* ══════════════════════ MAIN RECALC ══════════════════════ */
+function recalc(){
+  const lat=+$("lat").value||0,lng=+$("lng").value||0;
+  const aSqm=+$("area").value||0,aHa=aSqm/10000;
+  const tc=+$("tc").value||5,cP=+$("cPerv").value||0;
+  const fiEx=+$("fiEx").value||0,fiDev=+$("fiDev").value||0;
+
+  $("areaHa").textContent=aHa.toFixed(3);
+  $("mapLink").href=`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`;
+  $("mapFrame").src=`https://www.openstreetmap.org/export/embed.html?bbox=${lng-.006}%2C${lat-.004}%2C${lng+.006}%2C${lat+.004}&layer=mapnik&marker=${lat}%2C${lng}`;
+  updateBomLink();
+
+  const tag=$("ifdTag");tag.className=ifdSource==="sample"?"tag sample":"tag bom";tag.textContent=ifdSource==="sample"?"Sample Data":"BOM / Custom Data";
+
+  if(ifd){let h=`<table><thead><tr><th>Duration</th>`;ifd.aepKeys.forEach(k=>h+=`<th class="r">${k}</th>`);h+='</tr></thead><tbody>';
+    ifd.durations.forEach(d=>{h+=`<tr${Math.abs(d-tc)<.5?' class="hl"':''}><td style="color:var(--text2)">${d<60?d+' min':(d/60).toFixed(d%60===0?0:1)+' hr'}</td>`;ifd.aepKeys.forEach(k=>h+=`<td class="r">${ifd.intensities[k][d]?.toFixed(1)??'—'}</td>`);h+='</tr>'});
+    $("ifdTableWrap").innerHTML=h+'</tbody></table>'}
+
+  const exR=calcRM(fiEx,cP,tc,aHa),devR=calcRM(fiDev,cP,tc,aHa);
+  $("exC10Line").innerHTML=`C₁₀ = ${exR[0]?.c10.toFixed(3)??'—'} | ${(fiEx*100).toFixed(0)}% impervious`;
+  $("devC10Line").innerHTML=`C₁₀ = ${devR[0]?.c10.toFixed(3)??'—'} | ${(fiDev*100).toFixed(0)}% impervious`;
+  const ex1=exR.find(r=>r.key==="1"),dev1=devR.find(r=>r.key==="1");
+  const ccF=+$("ccFactor").value||1.2;
+  $("ccNoteVal").textContent=ccF.toFixed(2);
+  const ex2100=ex1?{intensity:ex1.intensity*ccF,Q:(ex1.cy*ex1.intensity*ccF*aHa)/360,cy:ex1.cy}:null;
+  const dev2100=dev1?{intensity:dev1.intensity*ccF,Q:(dev1.cy*dev1.intensity*ccF*aHa)/360,cy:dev1.cy}:null;
+  renderRT($("exTable"),exR,ex2100,"accent-ex",ccF);renderRT($("devTable"),devR,dev2100,"accent-dev",ccF);
+
+  if(ex1)$("exSummary").innerHTML=`<div class="big-num ex">${(ex1.Q*1000).toFixed(1)} <span>L/s</span></div><div class="big-label">1% AEP Peak Flow</div>${ex2100?`<div class="cc-line">${(ex2100.Q*1000).toFixed(1)} L/s <span>1% AEP 2100</span></div>`:''}`;
+  if(dev1)$("devSummary").innerHTML=`<div class="big-num dev">${(dev1.Q*1000).toFixed(1)} <span>L/s</span></div><div class="big-label">1% AEP Peak Flow</div>${dev2100?`<div class="cc-line">${(dev2100.Q*1000).toFixed(1)} L/s <span>1% AEP 2100</span></div>`:''}`;
+
+  let ch=`<thead><tr><th>AEP</th><th class="r" style="color:var(--existing)">Existing (L/s)</th><th class="r" style="color:var(--developed)">Developed (L/s)</th><th class="r">Increase</th><th class="r">%</th></tr></thead><tbody>`;
+  exR.forEach((er,i)=>{const dr=devR[i];if(!dr)return;const d=dr.Q-er.Q,pc=er.Q>0?(d/er.Q*100):0;
+    ch+=`<tr${er.key==="1"?' class="hl"':''}><td>${er.label}</td><td class="r accent-ex">${(er.Q*1000).toFixed(1)}</td><td class="r accent-dev">${(dr.Q*1000).toFixed(1)}</td><td class="r" style="color:#e2e8f0;font-weight:600">+${(d*1000).toFixed(1)}</td><td class="r inc-pos">+${pc.toFixed(1)}%</td></tr>`});
+  if(ex2100&&dev2100){const d=dev2100.Q-ex2100.Q,pc=ex2100.Q>0?(d/ex2100.Q*100):0;ch+=`<tr class="cc"><td>1% 2100</td><td class="r">${(ex2100.Q*1000).toFixed(1)}</td><td class="r">${(dev2100.Q*1000).toFixed(1)}</td><td class="r">+${(d*1000).toFixed(1)}</td><td class="r">+${pc.toFixed(1)}%</td></tr>`}
+  $("compTable").innerHTML=ch+'</tbody>';
+
+  /* ═══ DETENTION ═══ */
+  const detOn=$("detEnabled").checked;
+  $("detContent").classList.toggle("hidden",!detOn);
+  $("detNotes").classList.toggle("hidden",!detOn);
+  $("mainTitle").textContent=detOn?"⛈ Stormwater Runoff — Rational Method + Detention":"⛈ Stormwater Runoff — Rational Method";
+  $("mainSub").textContent=detOn?"Queensland Urban Drainage Manual (QUDM) · Q = C·I·A / 360 · Modified Puls Routing":"Queensland Urban Drainage Manual (QUDM) · Q = C·I·A / 360";
+  if(!detOn)return;
+  const rA=+$("roofArea").value||0,bFi=+$("bypassFi").value||0;
+  const tV=+$("tankVol").value||0,tH=+$("tankH").value||.1,wW=+$("ovrWidth").value||0;
+  const outs=[{d:(+$("o1d").value||0)/1000,inv:+$("o1h").value||0},{d:(+$("o2d").value||0)/1000,inv:+$("o2h").value||0},{d:(+$("o3d").value||0)/1000,inv:+$("o3h").value||0}];
+
+  outs.forEach((o,i)=>{
+    const el=$(`o${i+1}info`);
+    if(o.d<=0){el.textContent="Disabled";el.style.color="";return}
+    const topOfPipe=o.inv+o.d;
+    if(topOfPipe>tH){
+      // Clamp invert so pipe fits inside tank
+      const maxInv=Math.max(0,tH-o.d);
+      o.inv=maxInv;
+      $(`o${i+1}h`).value=maxInv.toFixed(2);
+      el.textContent=`⚠ Clamped inv to ${maxInv.toFixed(2)}m (pipe must fit within tank)`;
+      el.style.color="var(--amber)";
+    }else{
+      el.textContent=`Centre: ${(o.inv+o.d/2).toFixed(3)}m | A=${(Math.PI/4*o.d*o.d*1e6).toFixed(0)}mm²`;
+      el.style.color="";
+    }
+  });
+
+  const bSqm=Math.max(0,aSqm-rA),bHa=bSqm/10000,rHa=rA/10000;
+  $("bypassInfo").innerHTML=`Bypass: ${bSqm.toFixed(0)} m² (${bHa.toFixed(4)} ha) | Roof: ${rA.toFixed(0)} m² (${rHa.toFixed(4)} ha)`;
+
+  const aKm2=aSqm/1e6,tcPM=0.76*Math.pow(Math.max(aKm2,1e-6),0.38)*60;
+  const tcOverride=$("tcOverride5").checked;
+  const sd=tcOverride?5:Math.max(5,tcPM);
+  if(tcOverride){
+    $("stormInfo").innerHTML=`Area: ${(aKm2*1e3).toFixed(2)}×10⁻³ km² → t<sub>c,PM</sub> = ${tcPM.toFixed(2)} min → <strong style="color:var(--amber)">Overridden to 5.0 min</strong>`;
+  }else{
+    $("stormInfo").innerHTML=`Area: ${(aKm2*1e3).toFixed(2)}×10⁻³ km² → t<sub>c,PM</sub> = ${tcPM.toFixed(2)} min → <strong style="color:var(--tank)">Storm duration = ${sd.toFixed(1)} min</strong>`;
+  }
+
+  const bC10=Math.min(0.9,0.9*bFi+cP*(1-bFi));
+  const allAep=[...FF,{aep:"1% 2100",label:"1% AEP 2100",fy:ccF,key:"1_2100"}];
+  const dR=[];
+
+  allAep.forEach(ff=>{
+    let aI;
+    if(ff.key==="1_2100"){const c=matchCol(ifd.aepKeys,"1");aI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd)*ccF:0}
+    else{const c=matchCol(ifd.aepKeys,ff.key);aI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd):0}
+    const bCy=Math.min(0.9,ff.fy*bC10);
+    const r=runDet(ff,aI,rHa,bHa,bCy,tV,tH,outs,wW,sd);
+    const eC10=Math.min(0.9,0.9*fiEx+cP*(1-fiEx));
+    let eCy,eI;
+    if(ff.key==="1_2100"){eCy=Math.min(0.9,ccF*eC10);const c=matchCol(ifd.aepKeys,"1");eI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd)*ccF:0}
+    else{eCy=Math.min(0.9,ff.fy*eC10);const c=matchCol(ifd.aepKeys,ff.key);eI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd):0}
+    r.ePk=(eCy*eI*aHa)/360;r.nw=r.totP<=r.ePk*1.001;dR.push(r)
+  });
+
+  lastDetResults=dR;
+  const r1=dR.find(r=>r.ff.key==="1"),r1cc=dR.find(r=>r.ff.key==="1_2100");
+  if(r1){const ap=dR.filter(r=>r.ff.key!=="1_2100").every(r=>r.nw);
+    $("detResultGrid").innerHTML=`
+      <div class="det-stat"><div class="val" style="color:var(--tank)">${(r1.pO*1000).toFixed(1)}</div><div class="lbl">Tank Out (L/s) 1%</div></div>
+      <div class="det-stat"><div class="val" style="color:var(--bypass)">${(r1.bP*1000).toFixed(1)}</div><div class="lbl">Bypass (L/s) 1%</div></div>
+      <div class="det-stat"><div class="val" style="color:var(--developed)">${(r1.totP*1000).toFixed(1)}</div><div class="lbl">Total Dev (L/s) 1%</div></div>
+      <div class="det-stat"><div class="val" style="color:var(--existing)">${(r1.ePk*1000).toFixed(1)}</div><div class="lbl">Existing (L/s) 1%</div></div>
+      <div class="det-stat"><div class="val ${r1.nw?'pass':'fail'}">${r1.nw?'PASS':'FAIL'}</div><div class="lbl">1% AEP Result</div></div>
+      <div class="det-stat"><div class="val ${ap?'pass':'fail'}">${ap?'ALL PASS':'SOME FAIL'}</div><div class="lbl">Overall (excl. 2100)</div></div>
+      <div class="det-stat"><div class="val" style="color:var(--tank)">${r1.mS.toFixed(3)}</div><div class="lbl">Max Stage (m) 1%</div></div>
+      <div class="det-stat"><div class="val" style="color:var(--amber)">${r1.mV.toFixed(2)}</div><div class="lbl">Max Storage (m³) 1%</div></div>`}
+
+  let dt=`<thead><tr><th>AEP</th><th class="r">I (mm/hr)</th><th class="r" style="color:var(--existing)">Existing</th><th class="r" style="color:var(--tank)">Tank In</th><th class="r" style="color:var(--tank)">Tank Out</th><th class="r" style="color:var(--bypass)">Bypass</th><th class="r" style="color:var(--developed)">Total Dev</th><th class="r">Stage (m)</th><th class="r">Storage (m³)</th><th class="r">Result</th></tr></thead><tbody>`;
+  dR.forEach(r=>{const is2=r.ff.key==="1_2100",is1=r.ff.key==="1";
+    dt+=`<tr${is2?' class="cc"':(is1?' class="hl"':'')}><td>${r.ff.label}</td><td class="r">${r.aI.toFixed(1)}</td><td class="r">${(r.ePk*1000).toFixed(1)}</td><td class="r">${(r.Qp*1000).toFixed(1)}</td><td class="r">${(r.pO*1000).toFixed(1)}</td><td class="r">${(r.bP*1000).toFixed(1)}</td><td class="r" style="font-weight:600">${(r.totP*1000).toFixed(1)}</td><td class="r">${r.mS.toFixed(3)}</td><td class="r">${r.mV.toFixed(2)}</td><td class="r ${r.nw?'pass':'fail'}" style="font-weight:700">${r.nw?'✓ PASS':'✗ FAIL'}</td></tr>`});
+  $("detResultTable").innerHTML=dt+'</tbody>';
+
+  if(r1)drawHydro("hydroChart",r1.routing,r1.ePk,r1.bP,sd);
+  drawStageDisch("stageChart",tH,outs,wW);
+}
+
+/* ══════════════════════ UTILITIES ══════════════════════ */
+function applySoilType(){
+  const v=$("soilType").value;
+  if(v){$("cPerv").value=v;recalc()}
+}
+function showToast(msg){
+  const t=$("toast");t.textContent=msg;t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"),2500);
+}
+function shareUrl(){
+  const fields={
+    lat:$("lat").value, lng:$("lng").value, area:$("area").value,
+    tc:$("tc").value, cPerv:$("cPerv").value, ccF:$("ccFactor").value,
+    fiEx:$("fiEx").value, fiDev:$("fiDev").value,
+    det:$("detEnabled").checked?"1":"0",
+    roof:$("roofArea").value, bFi:$("bypassFi").value,
+    tVol:$("tankVol").value, tH:$("tankH").value, ovrW:$("ovrWidth").value,
+    o1d:$("o1d").value, o1h:$("o1h").value,
+    o2d:$("o2d").value, o2h:$("o2h").value,
+    o3d:$("o3d").value, o3h:$("o3h").value,
+    tc5:$("tcOverride5").checked?"1":"0"
+  };
+  const url=location.origin+location.pathname+"?"+Object.entries(fields).map(([k,v])=>k+"="+encodeURIComponent(v)).join("&");
+  navigator.clipboard.writeText(url).then(()=>showToast("✓ Link copied to clipboard")).catch(()=>{
+    // Fallback
+    prompt("Copy this URL:",url);
+  });
+}
+
+/* ══════════════════════ INIT ══════════════════════ */
+function init(){
+  const p=new URLSearchParams(location.search);
+  function pf(key,def){const v=p.get(key);return v!==null?parseFloat(v):def}
+  function pb(key,def){const v=p.get(key);return v!==null?v==="1":def}
+
+  $("lat").value=pf("lat",-27.966);
+  $("lng").value=pf("lng",pf("long",153.398));
+  $("area").value=pf("area",5000);
+  $("tc").value=pf("tc",15);
+  $("cPerv").value=pf("cPerv",0.10);
+  $("ccFactor").value=pf("ccF",1.20);
+  $("fiEx").value=pf("fiEx",0.30);$("fiExSlider").value=$("fiEx").value;
+  $("fiDev").value=pf("fiDev",0.70);$("fiDevSlider").value=$("fiDev").value;
+
+  // Match soil type dropdown if a standard value
+  const cpVal=$("cPerv").value;
+  const soilOpt=[...document.querySelectorAll("#soilType option")].find(o=>o.value===cpVal);
+  $("soilType").value=soilOpt?cpVal:"";
+
+  $("ifdCsv").value=SAMPLE_CSV;ifd=parseIFD(SAMPLE_CSV);
+
+  // Detention params
+  $("detEnabled").checked=pb("det",false);
+  $("roofArea").value=pf("roof",300);
+  $("bypassFi").value=pf("bFi",0.50);
+  $("tankVol").value=pf("tVol",5.0);
+  $("tankH").value=pf("tH",1.2);
+  $("ovrWidth").value=pf("ovrW",0.3);
+  $("o1d").value=pf("o1d",50);$("o1h").value=pf("o1h",0.0);
+  $("o2d").value=pf("o2d",40);$("o2h").value=pf("o2h",0.3);
+  $("o3d").value=pf("o3d",0);$("o3h").value=pf("o3h",0.6);
+  $("tcOverride5").checked=pb("tc5",false);
+
+  $("fiEx").oninput=()=>{$("fiExSlider").value=$("fiEx").value;recalc()};
+  $("fiExSlider").oninput=()=>{$("fiEx").value=$("fiExSlider").value;recalc()};
+  $("fiDev").oninput=()=>{$("fiDevSlider").value=$("fiDev").value;recalc()};
+  $("fiDevSlider").oninput=()=>{$("fiDev").value=$("fiDevSlider").value;recalc()};
+  $("cPerv").oninput=()=>{
+    // Reset soil dropdown if user manually changes Cperv
+    const cpv=$("cPerv").value;
+    const match=[...document.querySelectorAll("#soilType option")].find(o=>o.value===cpv);
+    $("soilType").value=match?cpv:"";
+    recalc();
+  };
+
+  ["lat","lng","area","tc","ccFactor","roofArea","bypassFi","tankVol","tankH","ovrWidth","o1d","o1h","o2d","o2h","o3d","o3h"].forEach(id=>$(id).oninput=recalc);
+  window.addEventListener("resize",()=>{if($("detEnabled").checked&&lastDetResults)recalc()});
+  recalc()
+}
+init();
+</script>
+</body>
+</html>
