@@ -214,6 +214,16 @@
     <div style="overflow-x:auto"><table id="compTable"></table></div>
   </div>
 
+  <!-- ADDITIONAL CATCHMENTS -->
+  <div class="card" style="border-color:#fb923c44;border-top:3px solid var(--bypass)">
+    <div class="card-title" style="color:var(--bypass)">
+      <span>Additional Catchments (External Flows / Road Runoff)</span>
+      <button class="btn" style="background:var(--bypass);font-size:11px;padding:6px 12px" onclick="addCatchment()">+ Add Catchment</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Add external catchments for road flows, neighbouring lots, or other contributing areas. Each produces a separate runoff table and is included in the combined site total.</div>
+    <div id="addCatchmentsWrap"></div>
+  </div>
+
   <!-- DETENTION -->
   <div id="detSection">
     <label class="check-toggle">
@@ -479,8 +489,30 @@ function applyPastedCsv(){
 }
 async function fetchIFD(){
   $("fetchStatus").textContent="Fetching...";$("fetchStatus").style.color="var(--text3)";
-  try{const u=buildBomUrl();const r=await fetch(u);if(!r.ok)throw 0;const t=await r.text();$("ifdCsv").value=t;ifd=parseIFD(t);ifdSource="bom";$("fetchStatus").innerHTML="✓ Loaded from BOM";$("fetchStatus").style.color="var(--green)";recalc()}
-  catch(e){$("fetchStatus").innerHTML=`✗ CORS blocked — paste CSV or JSON below, or <a href="${buildBomUrl()}" target="_blank" style="color:var(--cyan)">download manually →</a>`;$("fetchStatus").style.color="var(--amber)"}
+  const bomUrl=buildBomUrl();
+  // Try direct first, then CORS proxies as fallback
+  const attempts=[
+    {url:bomUrl, label:"direct"},
+    {url:"https://corsproxy.io/?"+encodeURIComponent(bomUrl), label:"proxy 1"},
+    {url:"https://api.allorigins.win/raw?url="+encodeURIComponent(bomUrl), label:"proxy 2"},
+  ];
+  for(const att of attempts){
+    try{
+      $("fetchStatus").textContent=`Fetching (${att.label})...`;
+      const r=await fetch(att.url,{signal:AbortSignal.timeout(10000)});
+      if(!r.ok)continue;
+      const t=await r.text();
+      if(!t||t.length<100)continue;
+      $("ifdCsv").value=t;ifd=parseIFD(t);ifdSource="bom";
+      const fmt=ifd.isBomDepth?"depths → intensities":"intensities";
+      $("fetchStatus").innerHTML=`✓ Loaded from BOM (${att.label}) — ${fmt}, ${ifd.durations.length} durations × ${ifd.aepKeys.length} AEPs`;
+      $("fetchStatus").style.color="var(--green)";
+      $("ifdEditor").classList.add("hidden");
+      recalc();return;
+    }catch(e){continue}
+  }
+  $("fetchStatus").innerHTML=`✗ Could not fetch — paste CSV or JSON below, or <a href="${bomUrl}" target="_blank" style="color:var(--cyan)">download manually →</a>`;
+  $("fetchStatus").style.color="var(--amber)";
 }
 function buildBomUrl(){return`https://www.bom.gov.au/water/designRainfalls/revised-ifd/services/downloadtable?all_design=&input_type=dd&points=${encodeURIComponent(JSON.stringify({points:[[parseFloat($("lat").value),parseFloat($("lng").value)]]}))}`}
 function updateBomLink(){const e=$("bomLink");if(e)e.href=buildBomUrl()}
@@ -604,6 +636,95 @@ function drawStageDisch(cid,tH,outs,wW){
   ctx.textAlign="right";for(let i=0;i<=5;i++){ctx.fillText(((i/5)*mxH).toFixed(2),p.l-6,ty((i/5)*mxH)+3)}
   ctx.save();ctx.translate(14,p.t+ph/2);ctx.rotate(-Math.PI/2);ctx.textAlign="center";ctx.fillText("Stage (m)",0,0);ctx.restore();
   ctx.textAlign="center";ctx.fillText("Discharge (L/s)",p.l+pw/2,H-4);
+}
+
+/* ══════════════════════ ADDITIONAL CATCHMENTS ══════════════════════ */
+let addCatchments=[]; // {id, name, area, fi, tc, tcAuto}
+let addCatchId=0;
+
+function addCatchment(){
+  const id=++addCatchId;
+  const areaDefault=500;
+  const aKm2=areaDefault/1e6;
+  const tcPM=Math.max(5,0.76*Math.pow(Math.max(aKm2,1e-6),0.38)*60);
+  addCatchments.push({id,name:`Catchment ${id}`,area:areaDefault,fi:0.80,tc:tcPM,tcAuto:true});
+  renderAddCatchments();recalc();
+}
+
+function removeAddCatchment(id){
+  addCatchments=addCatchments.filter(c=>c.id!==id);
+  renderAddCatchments();recalc();
+}
+
+function updateAddCatchment(id,field,val){
+  const c=addCatchments.find(x=>x.id===id);if(!c)return;
+  if(field==='name')c.name=val;
+  else if(field==='area'){c.area=parseFloat(val)||0;if(c.tcAuto){const aKm2=c.area/1e6;c.tc=Math.max(5,0.76*Math.pow(Math.max(aKm2,1e-6),0.38)*60)}}
+  else if(field==='fi')c.fi=parseFloat(val)||0;
+  else if(field==='tc'){c.tc=parseFloat(val)||5;c.tcAuto=false}
+  else if(field==='tcAuto'){c.tcAuto=val;if(val){const aKm2=c.area/1e6;c.tc=Math.max(5,0.76*Math.pow(Math.max(aKm2,1e-6),0.38)*60)}}
+  renderAddCatchments();recalc();
+}
+
+function renderAddCatchments(){
+  const wrap=$("addCatchmentsWrap");
+  if(!addCatchments.length){wrap.innerHTML='<div style="font-size:11px;color:var(--text5);font-style:italic">No additional catchments. Click "+ Add Catchment" to include external flows.</div>';return}
+  let h='';
+  addCatchments.forEach(c=>{
+    const aHa=(c.area/10000).toFixed(4);
+    const aKm2=c.area/1e6;
+    const tcPM=Math.max(5,0.76*Math.pow(Math.max(aKm2,1e-6),0.38)*60);
+    h+=`<div style="background:var(--bg3);border:1px solid #fb923c33;border-left:3px solid var(--bypass);border-radius:5px;padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <input type="text" value="${c.name}" onchange="updateAddCatchment(${c.id},'name',this.value)"
+          style="background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--bypass);font:700 13px var(--font-sans);padding:2px 0;width:200px;outline:none">
+        <button onclick="removeAddCatchment(${c.id})" style="background:transparent;border:1px solid #ef444466;color:#ef4444;border-radius:3px;padding:3px 8px;font:700 10px var(--font-mono);cursor:pointer">✕ Remove</button>
+      </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+        <div class="param"><span class="lbl" style="min-width:70px">Area</span><input type="number" value="${c.area}" min="0" style="width:80px" onchange="updateAddCatchment(${c.id},'area',this.value)"><span class="unit">m² (${aHa} ha)</span></div>
+        <div class="param"><span class="lbl" style="min-width:30px">f<sub>i</sub></span><input type="number" value="${c.fi}" min="0" max="1" step="0.01" style="width:60px" onchange="updateAddCatchment(${c.id},'fi',this.value)"></div>
+        <div class="param"><span class="lbl" style="min-width:30px">t<sub>c</sub></span><input type="number" value="${c.tc.toFixed(1)}" min="1" step="1" style="width:70px" ${c.tcAuto?'disabled':''} onchange="updateAddCatchment(${c.id},'tc',this.value)"><span class="unit">min</span></div>
+        <label style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text3);cursor:pointer;user-select:none">
+          <input type="checkbox" ${c.tcAuto?'checked':''} onchange="updateAddCatchment(${c.id},'tcAuto',this.checked)" style="accent-color:var(--bypass);width:13px;height:13px">
+          Auto t<sub>c</sub> (P&amp;M: ${tcPM.toFixed(1)} min)
+        </label>
+      </div>
+      <div style="overflow-x:auto"><table id="addCatch_${c.id}_table" style="font-size:11px"></table></div>
+    </div>`;
+  });
+  wrap.innerHTML=h;
+  // Tables get filled by recalc
+}
+
+function calcAddCatchments(cPerv){
+  if(!ifd)return[];
+  return addCatchments.map(c=>{
+    const aHa=c.area/10000;
+    const c10=Math.min(0.9,0.9*c.fi+cPerv*(1-c.fi));
+    const results=FF.map(ff=>{
+      const cy=Math.min(0.9,ff.fy*c10);
+      const col=matchCol(ifd.aepKeys,ff.key);
+      let I=0;if(col&&ifd.intensities[col])I=interpI(ifd.durations,ifd.intensities[col],c.tc);
+      return{...ff,c10,cy,intensity:I,Q:(cy*I*aHa)/360};
+    });
+    // 1% 2100
+    const r1=results.find(r=>r.key==="1");
+    const cc=r1?{intensity:r1.intensity*1.2,Q:(r1.cy*r1.intensity*1.2*aHa)/360,cy:r1.cy}:null;
+    return{...c,aHa,c10,results,cc};
+  });
+}
+
+function renderAddCatchmentTables(calcData){
+  calcData.forEach(cd=>{
+    const el=document.getElementById(`addCatch_${cd.id}_table`);
+    if(!el)return;
+    let h=`<thead><tr><th>AEP</th><th>Cy</th><th class="r">I (mm/hr)</th><th class="r">Q (m³/s)</th><th class="r">Q (L/s)</th></tr></thead><tbody>`;
+    cd.results.forEach(r=>{
+      h+=`<tr${r.key==="1"?' class="hl"':''}><td>${r.label}</td><td>${r.cy.toFixed(3)}</td><td class="r">${r.intensity.toFixed(1)}</td><td class="r" style="color:var(--bypass);font-weight:600">${r.Q.toFixed(4)}</td><td class="r" style="color:var(--bypass)">${(r.Q*1000).toFixed(1)}</td></tr>`;
+    });
+    if(cd.cc)h+=`<tr class="cc"><td>1% 2100</td><td>${cd.cc.cy.toFixed(3)}</td><td class="r">${cd.cc.intensity.toFixed(1)}</td><td class="r">${cd.cc.Q.toFixed(4)}</td><td class="r">${(cd.cc.Q*1000).toFixed(1)}</td></tr>`;
+    el.innerHTML=h+'</tbody>';
+  });
 }
 
 /* ══════════════════════ OPTIMISER ══════════════════════ */
@@ -804,6 +925,10 @@ function recalc(){
   if(ex2100&&dev2100){const d=dev2100.Q-ex2100.Q,pc=ex2100.Q>0?(d/ex2100.Q*100):0;ch+=`<tr class="cc"><td>1% 2100</td><td class="r">${(ex2100.Q*1000).toFixed(1)}</td><td class="r">${(dev2100.Q*1000).toFixed(1)}</td><td class="r">+${(d*1000).toFixed(1)}</td><td class="r">+${pc.toFixed(1)}%</td></tr>`}
   $("compTable").innerHTML=ch+'</tbody>';
 
+  /* ═══ ADDITIONAL CATCHMENTS ═══ */
+  const addCalcData=calcAddCatchments(cP);
+  renderAddCatchmentTables(addCalcData);
+
   /* ═══ DETENTION ═══ */
   const detOn=$("detEnabled").checked;
   $("detContent").classList.toggle("hidden",!detOn);
@@ -960,6 +1085,7 @@ function init(){
 
   ["lat","lng","area","tc","ccFactor","roofArea","bypassFi","tankVol","tankH","ovrWidth","o1d","o1h","o2d","o2h","o3d","o3h"].forEach(id=>$(id).oninput=recalc);
   window.addEventListener("resize",()=>{if($("detEnabled").checked&&lastDetResults)recalc()});
+  renderAddCatchments();
   recalc()
 }
 init();
