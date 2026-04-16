@@ -602,7 +602,7 @@ function calcRM(fi,tc,aHa,landCover,soilPerm){
   const col10=matchCol(ifd.aepKeys,"10");
   const i10=col10&&ifd.intensities[col10]?interpI(ifd.durations,ifd.intensities[col10],tc):60;
   const c10=lookupC10(fi,i10,landCover,soilPerm);
-  return FF.map(ff=>{const cy=Math.min(0.9,ff.fy*c10);const col=matchCol(ifd.aepKeys,ff.key);let I=0;if(col&&ifd.intensities[col])I=interpI(ifd.durations,ifd.intensities[col],tc);return{...ff,c10,cy,intensity:I,Q:(cy*I*aHa)/360,i10}})
+  return FF.map(ff=>{const cy=Math.min(1.0,ff.fy*c10);const col=matchCol(ifd.aepKeys,ff.key);let I=0;if(col&&ifd.intensities[col])I=interpI(ifd.durations,ifd.intensities[col],tc);return{...ff,c10,cy,intensity:I,Q:(cy*I*aHa)/360,i10}})
 }
 function renderRT(el,res,d2100,ac,ccF){
   const cf=ccF||1.2;
@@ -637,7 +637,7 @@ function modPuls(inflow,dt,V,H,outs,wW){
 }
 
 function runDet(ff,aI,rHa,bHa,bCy,V,H,outs,wW,sdMin){
-  const rCy=Math.min(0.9,ff.fy*0.9);const Qp=(rCy*aI*rHa)/360;
+  const rCy=Math.min(1.0,ff.fy*0.9);const Qp=(rCy*aI*rHa)/360;
   const tcS=sdMin*60,dt=Math.max(1,Math.min(5,tcS/80));
   const inflow=triHydro(Qp,tcS,dt);const routing=modPuls(inflow,dt,V,H,outs,wW);
   const pO=Math.max(...routing.map(r=>r.O));const mS=Math.max(...routing.map(r=>r.h));const mV=Math.max(...routing.map(r=>r.S));
@@ -786,7 +786,7 @@ function calcAddCatchments(landCover,soilPerm,ccFactor){
     const i10=col10&&ifd.intensities[col10]?interpI(ifd.durations,ifd.intensities[col10],c.tc):60;
     const c10=lookupC10(c.fi,i10,landCover,soilPerm);
     const results=FF.map(ff=>{
-      const cy=Math.min(0.9,ff.fy*c10);
+      const cy=Math.min(1.0,ff.fy*c10);
       const col=matchCol(ifd.aepKeys,ff.key);
       let I=0;if(col&&ifd.intensities[col])I=interpI(ifd.durations,ifd.intensities[col],c.tc);
       return{...ff,c10,cy,intensity:I,Q:(cy*I*aHa)/360};
@@ -856,12 +856,12 @@ function runOptimiser(){
     if(ff.key==="1_2100"){const c=matchCol(ifd.aepKeys,"1");aI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd)*1.2:0}
     else{const c=matchCol(ifd.aepKeys,ff.key);aI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd):0}
     let eCy;
-    if(ff.key==="1_2100")eCy=Math.min(0.9,1.2*eC10);else eCy=Math.min(0.9,ff.fy*eC10);
+    if(ff.key==="1_2100")eCy=Math.min(1.0,1.2*eC10);else eCy=Math.min(1.0,ff.fy*eC10);
     let eI;
     if(ff.key==="1_2100"){const c=matchCol(ifd.aepKeys,"1");eI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd)*1.2:0}
     else{const c=matchCol(ifd.aepKeys,ff.key);eI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd):0}
     const ePk=(eCy*eI*aHa)/360;
-    const bCy=Math.min(0.9,ff.fy*bC10);
+    const bCy=Math.min(1.0,ff.fy*bC10);
     return{ff,aI,ePk,bCy};
   });
 
@@ -904,7 +904,7 @@ function runOptimiser(){
           // Test all AEPs — must ALL pass
           let allPass=true;
           for(const ad of aepData){
-            const rCy=Math.min(0.9,ad.ff.fy*0.9);
+            const rCy=Math.min(1.0,ad.ff.fy*0.9);
             const Qp=(rCy*ad.aI*rHa)/360;
             const tcS=sd*60, dt=Math.max(1,Math.min(5,tcS/80));
             const inflow=triHydro(Qp,tcS,dt);
@@ -932,7 +932,7 @@ function runOptimiser(){
       const r1data=aepData.find(a=>a.ff.key==="1");
       let r1detail=null;
       if(r1data){
-        const rCy=Math.min(0.9,r1data.ff.fy*0.9);
+        const rCy=Math.min(1.0,r1data.ff.fy*0.9);
         const Qp=(rCy*r1data.aI*rHa)/360;
         const tcS=sd*60,dt=Math.max(1,Math.min(5,tcS/80));
         const inflow=triHydro(Qp,tcS,dt);
@@ -1071,11 +1071,11 @@ function recalc(){
     let aI;
     if(ff.key==="1_2100"){const c=matchCol(ifd.aepKeys,"1");aI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd)*ccF:0}
     else{const c=matchCol(ifd.aepKeys,ff.key);aI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd):0}
-    const bCy=Math.min(0.9,ff.fy*bC10);
+    const bCy=Math.min(1.0,ff.fy*bC10);
     const r=runDet(ff,aI,rHa,bHa,bCy,tV,tH,outs,wW,sd);
     let eCy,eI;
-    if(ff.key==="1_2100"){eCy=Math.min(0.9,ccF*eC10);const c=matchCol(ifd.aepKeys,"1");eI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd)*ccF:0}
-    else{eCy=Math.min(0.9,ff.fy*eC10);const c=matchCol(ifd.aepKeys,ff.key);eI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd):0}
+    if(ff.key==="1_2100"){eCy=Math.min(1.0,ccF*eC10);const c=matchCol(ifd.aepKeys,"1");eI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd)*ccF:0}
+    else{eCy=Math.min(1.0,ff.fy*eC10);const c=matchCol(ifd.aepKeys,ff.key);eI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd):0}
     r.ePk=(eCy*eI*aHa)/360;r.nw=r.totP<=r.ePk*1.001;dR.push(r)
   });
 
