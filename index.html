@@ -161,7 +161,7 @@
     </div>
     <div id="fetchStatus" style="font-size:11px;margin-bottom:8px"></div>
     <div id="ifdEditor" class="hidden" style="margin-bottom:12px">
-      <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Paste BOM IFD data below — accepts <strong style="color:var(--text2)">JSON</strong> (from BOM API, depths auto-converted to intensities), <strong style="color:var(--text2)">BOM CSV</strong> (depth format with "Duration in min" column), or <strong style="color:var(--text2)">intensity CSV</strong>. Or <a id="bomLink" target="_blank" rel="noopener noreferrer">download from BOM →</a></div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Paste BOM IFD data below — accepts <strong style="color:var(--text2)">JSON</strong> (BOM API), <strong style="color:var(--text2)">CSV</strong> (comma-separated), or <strong style="color:var(--text2)">TSV</strong> (tab-separated, e.g. pasted from Excel). Depth format auto-detected and converted to intensities. Or <a id="bomLink" target="_blank" rel="noopener noreferrer">download from BOM →</a></div>
       <textarea id="ifdCsv" rows="10"></textarea>
       <button class="btn" style="margin-top:6px" onclick="applyPastedCsv()">Apply</button>
     </div>
@@ -169,22 +169,26 @@
   </div>
   <div class="card">
     <div class="card-title">Catchment Parameters</div>
-    <div class="formula">C₁₀ = 0.9 × f<sub>i</sub> + C<sub>perv</sub> × (1 − f<sub>i</sub>)  |  C<sub>y</sub> = F<sub>y</sub> × C₁₀  |  Q = C<sub>y</sub> × I × A / 360</div>
+    <div class="formula">C₁₀ from QUDM Table 4.5.3 (interpolated on I₁₀ and f<sub>i</sub>) | f<sub>i</sub>=0 from Table 4.5.4 | C<sub>y</sub> = F<sub>y</sub> × C₁₀ | Q = C<sub>y</sub> × I × A / 360</div>
     <div class="params-row">
       <div class="param"><span class="lbl">Time of concentration (t<sub>c</sub>)</span><input type="number" id="tc" min="1" max="1440" step="1" style="width:80px"><span class="unit">min</span></div>
+    </div>
+    <div class="params-row" style="margin-top:4px">
       <div class="param">
-        <span class="lbl">Pervious C (C<sub>perv</sub>)</span>
-        <select id="soilType" onchange="applySoilType()">
-          <option value="">Custom</option>
-          <option value="0.05">Sandy, flat &lt;1% (0.05)</option>
-          <option value="0.10">Sandy, moderate 1–5% (0.10)</option>
-          <option value="0.15">Sandy, steep &gt;5% (0.15)</option>
-          <option value="0.13">Clay, flat &lt;1% (0.13)</option>
-          <option value="0.17">Clay, moderate 1–5% (0.17)</option>
-          <option value="0.25">Clay, steep &gt;5% (0.25)</option>
-          <option value="0.20">Parks / gardens (0.20)</option>
+        <span class="lbl">Pervious land cover</span>
+        <select id="landCover" onchange="recalc()" style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--cyan);padding:6px 8px;font:12px var(--font-mono);outline:none">
+          <option value="dense">Dense bushland</option>
+          <option value="medium" selected>Medium bush / Good grass / Pasture</option>
+          <option value="light">Light cover / Poor grass / Bare fallow</option>
         </select>
-        <input type="number" id="cPerv" min="0" max="0.5" step="0.01" style="width:70px">
+      </div>
+      <div class="param">
+        <span class="lbl" style="min-width:120px">Soil permeability</span>
+        <select id="soilPerm" onchange="recalc()" style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--cyan);padding:6px 8px;font:12px var(--font-mono);outline:none">
+          <option value="high">High</option>
+          <option value="med" selected>Medium</option>
+          <option value="low">Low</option>
+        </select>
       </div>
     </div>
     <div class="params-row" style="margin-top:4px">
@@ -323,7 +327,9 @@
     <div class="inner">
       <strong>Notes:</strong><br>
       • Rational Method per QUDM: Q = C<sub>y</sub> · I · A / 360 (Q in m³/s, I in mm/hr, A in ha)<br>
-      • C₁₀ = 0.9 · f<sub>i</sub> + C<sub>perv</sub> · (1 − f<sub>i</sub>) with C<sub>y</sub> = F<sub>y</sub> · C₁₀ ≤ 0.9<br>
+      • C₁₀ from QUDM Table 4.5.3 — interpolated on I₁₀ (10% AEP intensity at t<sub>c</sub>) and fraction impervious f<sub>i</sub><br>
+      • C₁₀ at f<sub>i</sub>=0 from QUDM Table 4.5.4 — by pervious land cover type and soil permeability<br>
+      • C<sub>y</sub> = F<sub>y</sub> × C₁₀ ≤ 0.9<br>
       • Frequency factors from QUDM Table 5.05 (F<sub>y</sub> relative to 10% AEP)<br>
       • 1% AEP 2100: current 1% AEP intensity × <span id="ccNoteVal">1.20</span> climate change factor<br>
       • IFD intensities interpolated using log-log method between standard durations
@@ -376,6 +382,70 @@ const SAMPLE_CSV=`Duration,1 EY,50% AEP,20% AEP,10% AEP,5% AEP,2% AEP,1% AEP
 let ifd=null,ifdSource="sample",lastDetResults=null;
 const $=id=>document.getElementById(id);
 
+/* ── QUDM Table 4.5.3 — C₁₀ vs I₁₀ and fᵢ ── */
+// Intensity midpoints (mm/hr) for each row band
+const C10_I=[41.5, 47, 52, 57, 62, 67, 80];
+// Fraction impervious columns (fi=0 comes from Table 4.5.4)
+const C10_FI=[0.20, 0.40, 0.60, 0.80, 0.90, 1.00];
+// C10 values [intensity row][fi column]
+const C10_TABLE=[
+  [0.44, 0.55, 0.67, 0.78, 0.84, 0.90],
+  [0.49, 0.60, 0.70, 0.80, 0.85, 0.90],
+  [0.55, 0.64, 0.72, 0.81, 0.86, 0.90],
+  [0.60, 0.68, 0.75, 0.83, 0.86, 0.90],
+  [0.65, 0.72, 0.78, 0.84, 0.87, 0.90],
+  [0.71, 0.76, 0.80, 0.85, 0.88, 0.90],
+  [0.74, 0.78, 0.82, 0.86, 0.88, 0.90],
+];
+
+/* ── QUDM Table 4.5.4 — C₁₀ at fᵢ=0 by land cover & soil permeability ── */
+// Keys: landCover → soilPerm → [values per intensity row]
+const C10_PERV={
+  dense:  {high:[0.08,0.10,0.12,0.13,0.15,0.17,0.18], med:[0.24,0.29,0.35,0.40,0.44,0.50,0.53], low:[0.32,0.39,0.46,0.53,0.59,0.66,0.70]},
+  medium: {high:[0.16,0.20,0.23,0.27,0.30,0.33,0.35], med:[0.32,0.39,0.46,0.53,0.59,0.66,0.70], low:[0.40,0.49,0.58,0.66,0.70,0.70,0.70]},
+  light:  {high:[0.24,0.29,0.35,0.40,0.44,0.50,0.53], med:[0.40,0.49,0.58,0.66,0.70,0.70,0.70], low:[0.48,0.59,0.69,0.70,0.70,0.70,0.70]},
+};
+
+// Linear interpolation helper
+function lerp(x,x0,x1,y0,y1){if(x1===x0)return y0;return y0+(y1-y0)*(x-x0)/(x1-x0)}
+
+// Interpolate a value from an array indexed by C10_I intensities
+function interpByI(arr,i10){
+  if(i10<=C10_I[0])return arr[0];
+  if(i10>=C10_I[C10_I.length-1])return arr[arr.length-1];
+  for(let k=0;k<C10_I.length-1;k++){
+    if(i10>=C10_I[k]&&i10<=C10_I[k+1])return lerp(i10,C10_I[k],C10_I[k+1],arr[k],arr[k+1]);
+  }
+  return arr[arr.length-1];
+}
+
+// Look up C₁₀ from QUDM Tables 4.5.3 & 4.5.4
+// fi: fraction impervious, i10: 10% AEP intensity (mm/hr), landCover, soilPerm
+function lookupC10(fi,i10,landCover,soilPerm){
+  if(fi>=1.0)return 0.90;
+  // Get the fi=0 value from Table 4.5.4
+  const pervArr=C10_PERV[landCover]?.[soilPerm]||C10_PERV.medium.med;
+  const c10_fi0=interpByI(pervArr,i10);
+
+  if(fi<=0)return c10_fi0;
+
+  // Get C10 at each fi column from Table 4.5.3 for this i10
+  const c10_at_fi=C10_FI.map((_,j)=>{
+    const colArr=C10_TABLE.map(row=>row[j]);
+    return interpByI(colArr,i10);
+  });
+
+  // Now interpolate across fi: [0, 0.20, 0.40, 0.60, 0.80, 0.90, 1.00]
+  const allFi=[0, ...C10_FI];
+  const allC10=[c10_fi0, ...c10_at_fi];
+
+  if(fi>=allFi[allFi.length-1])return allC10[allC10.length-1];
+  for(let k=0;k<allFi.length-1;k++){
+    if(fi>=allFi[k]&&fi<=allFi[k+1])return lerp(fi,allFi[k],allFi[k+1],allC10[k],allC10[k+1]);
+  }
+  return allC10[allC10.length-1];
+}
+
 /* ── IFD ── */
 function parseDur(t){t=t.trim().toLowerCase();return t.includes("hour")?parseFloat(t)*60:parseFloat(t)}
 
@@ -404,7 +474,15 @@ function parseIFD(raw){
   let hi=lines.findIndex(l=>{const lc=l.toLowerCase();return lc.includes("duration")&&(l.includes("AEP")||l.includes("EY"))});
   if(hi<0)hi=0;
 
-  const hdrs=lines[hi].split(",").map(s=>s.trim());
+  // Auto-detect delimiter: tab or comma
+  const headerLine=lines[hi];
+  const tabCount=(headerLine.match(/\t/g)||[]).length;
+  const commaCount=(headerLine.match(/,/g)||[]).length;
+  const delim=tabCount>commaCount?"\t":",";
+
+  const split=l=>l.split(delim).map(s=>s.trim());
+
+  const hdrs=split(lines[hi]);
   const bomDepth=isBomDepthFormat(lines[hi]);
 
   // For BOM depth format: columns are Duration, Duration in min, then AEP columns
@@ -420,7 +498,7 @@ function parseIFD(raw){
   aK.forEach(k=>ints[k]={});
 
   for(let i=hi+1;i<lines.length;i++){
-    const p=lines[i].split(",").map(s=>s.trim());
+    const p=split(lines[i]);
     if(p.length<dataStartCol+1)continue;
 
     // Get duration in minutes
@@ -445,7 +523,7 @@ function parseIFD(raw){
       }
     }
   }
-  return{durations:durs.sort((a,b)=>a-b),aepKeys:aK,intensities:ints,isBomDepth:bomDepth}
+  return{durations:durs.sort((a,b)=>a-b),aepKeys:aK,intensities:ints,isBomDepth:bomDepth,delim:delim==="\t"?"tab":"comma"}
 }
 
 function interpI(durs,iMap,tc){
@@ -477,7 +555,7 @@ function applyPastedCsv(){
     const{isBomJson}=extractCsvFromInput(raw);
     ifd=parseIFD(raw);
     ifdSource="pasted";
-    const fmt=isBomJson?"BOM JSON (depths → intensities)":ifd.isBomDepth?"BOM CSV (depths → intensities)":"intensity CSV";
+    const fmt=isBomJson?"BOM JSON (depths → intensities)":ifd.isBomDepth?`BOM ${ifd.delim}-separated (depths → intensities)`:`${ifd.delim}-separated intensity data`;
     $("fetchStatus").innerHTML=`✓ Parsed as ${fmt} — ${ifd.durations.length} durations × ${ifd.aepKeys.length} AEPs`;
     $("fetchStatus").style.color="var(--green)";
     $("ifdEditor").classList.add("hidden");
@@ -518,9 +596,13 @@ function buildBomUrl(){return`https://www.bom.gov.au/water/designRainfalls/revis
 function updateBomLink(){const e=$("bomLink");if(e)e.href=buildBomUrl()}
 
 /* ── Rational Method ── */
-function calcRM(fi,cPerv,tc,aHa){
-  if(!ifd)return[];const c10=Math.min(0.9,0.9*fi+cPerv*(1-fi));
-  return FF.map(ff=>{const cy=Math.min(0.9,ff.fy*c10);const col=matchCol(ifd.aepKeys,ff.key);let I=0;if(col&&ifd.intensities[col])I=interpI(ifd.durations,ifd.intensities[col],tc);return{...ff,c10,cy,intensity:I,Q:(cy*I*aHa)/360}})
+function calcRM(fi,tc,aHa,landCover,soilPerm){
+  if(!ifd)return[];
+  // Get I₁₀ (10% AEP intensity at this tc) for C₁₀ lookup
+  const col10=matchCol(ifd.aepKeys,"10");
+  const i10=col10&&ifd.intensities[col10]?interpI(ifd.durations,ifd.intensities[col10],tc):60;
+  const c10=lookupC10(fi,i10,landCover,soilPerm);
+  return FF.map(ff=>{const cy=Math.min(0.9,ff.fy*c10);const col=matchCol(ifd.aepKeys,ff.key);let I=0;if(col&&ifd.intensities[col])I=interpI(ifd.durations,ifd.intensities[col],tc);return{...ff,c10,cy,intensity:I,Q:(cy*I*aHa)/360,i10}})
 }
 function renderRT(el,res,d2100,ac,ccF){
   const cf=ccF||1.2;
@@ -696,21 +778,22 @@ function renderAddCatchments(){
   // Tables get filled by recalc
 }
 
-function calcAddCatchments(cPerv){
+function calcAddCatchments(landCover,soilPerm,ccFactor){
   if(!ifd)return[];
   return addCatchments.map(c=>{
     const aHa=c.area/10000;
-    const c10=Math.min(0.9,0.9*c.fi+cPerv*(1-c.fi));
+    const col10=matchCol(ifd.aepKeys,"10");
+    const i10=col10&&ifd.intensities[col10]?interpI(ifd.durations,ifd.intensities[col10],c.tc):60;
+    const c10=lookupC10(c.fi,i10,landCover,soilPerm);
     const results=FF.map(ff=>{
       const cy=Math.min(0.9,ff.fy*c10);
       const col=matchCol(ifd.aepKeys,ff.key);
       let I=0;if(col&&ifd.intensities[col])I=interpI(ifd.durations,ifd.intensities[col],c.tc);
       return{...ff,c10,cy,intensity:I,Q:(cy*I*aHa)/360};
     });
-    // 1% 2100
     const r1=results.find(r=>r.key==="1");
-    const cc=r1?{intensity:r1.intensity*1.2,Q:(r1.cy*r1.intensity*1.2*aHa)/360,cy:r1.cy}:null;
-    return{...c,aHa,c10,results,cc};
+    const cc=r1?{intensity:r1.intensity*ccFactor,Q:(r1.cy*r1.intensity*ccFactor*aHa)/360,cy:r1.cy}:null;
+    return{...c,aHa,c10,i10,results,cc};
   });
 }
 
@@ -740,12 +823,11 @@ function runOptimiser(){
     $("optStatus").textContent="✗ Enter candidate values for volumes, heights, and diameters";$("optStatus").style.color="var(--amber)";return}
 
   // Read current parameters
-  const aSqm=+$("area").value||0, aHa=aSqm/10000, cP=+$("cPerv").value||0;
+  const aSqm=+$("area").value||0, aHa=aSqm/10000;
+  const lc=$("landCover").value, sp=$("soilPerm").value;
   const fiEx=+$("fiEx").value||0, rA=+$("roofArea").value||0, bFi=+$("bypassFi").value||0;
   const wW=+$("ovrWidth").value||0;
   const bSqm=Math.max(0,aSqm-rA), bHa=bSqm/10000, rHa=rA/10000;
-  const bC10=Math.min(0.9,0.9*bFi+cP*(1-bFi));
-  const eC10=Math.min(0.9,0.9*fiEx+cP*(1-fiEx));
 
   // Storm duration
   const aKm2=aSqm/1e6, tcPM=0.76*Math.pow(Math.max(aKm2,1e-6),0.38)*60;
@@ -758,6 +840,12 @@ function runOptimiser(){
   const activeSlots=[(+$("o1d").value||0)>0, (+$("o2d").value||0)>0, (+$("o3d").value||0)>0];
   const numActive=activeSlots.filter(Boolean).length;
   if(numActive===0){$("optStatus").textContent="✗ Enable at least one outlet first";$("optStatus").style.color="var(--amber)";return}
+
+  // Get I₁₀ at storm duration for C₁₀ lookup
+  const col10opt=matchCol(ifd.aepKeys,"10");
+  const i10opt=col10opt&&ifd.intensities[col10opt]?interpI(ifd.durations,ifd.intensities[col10opt],sd):60;
+  const eC10=lookupC10(fiEx,i10opt,lc,sp);
+  const bC10=lookupC10(bFi,i10opt,lc,sp);
 
   // Build AEPs to check (all standard + 2100)
   const allAep=[...FF,{aep:"1% 2100",label:"1% AEP 2100",fy:1.20,key:"1_2100"}];
@@ -892,7 +980,8 @@ function applyOptimal(V,H,diams){
 function recalc(){
   const lat=+$("lat").value||0,lng=+$("lng").value||0;
   const aSqm=+$("area").value||0,aHa=aSqm/10000;
-  const tc=+$("tc").value||5,cP=+$("cPerv").value||0;
+  const tc=+$("tc").value||5;
+  const lc=$("landCover").value, sp=$("soilPerm").value;
   const fiEx=+$("fiEx").value||0,fiDev=+$("fiDev").value||0;
 
   $("areaHa").textContent=aHa.toFixed(3);
@@ -906,9 +995,10 @@ function recalc(){
     ifd.durations.forEach(d=>{h+=`<tr${Math.abs(d-tc)<.5?' class="hl"':''}><td style="color:var(--text2)">${d<60?d+' min':(d/60).toFixed(d%60===0?0:1)+' hr'}</td>`;ifd.aepKeys.forEach(k=>h+=`<td class="r">${ifd.intensities[k][d]?.toFixed(1)??'—'}</td>`);h+='</tr>'});
     $("ifdTableWrap").innerHTML=h+'</tbody></table>'}
 
-  const exR=calcRM(fiEx,cP,tc,aHa),devR=calcRM(fiDev,cP,tc,aHa);
-  $("exC10Line").innerHTML=`C₁₀ = ${exR[0]?.c10.toFixed(3)??'—'} | ${(fiEx*100).toFixed(0)}% impervious`;
-  $("devC10Line").innerHTML=`C₁₀ = ${devR[0]?.c10.toFixed(3)??'—'} | ${(fiDev*100).toFixed(0)}% impervious`;
+  const exR=calcRM(fiEx,tc,aHa,lc,sp),devR=calcRM(fiDev,tc,aHa,lc,sp);
+  const i10disp=exR[0]?.i10;
+  $("exC10Line").innerHTML=`C₁₀ = ${exR[0]?.c10.toFixed(3)??'—'} | ${(fiEx*100).toFixed(0)}% imp | I₁₀ = ${i10disp?.toFixed(1)??'—'} mm/hr`;
+  $("devC10Line").innerHTML=`C₁₀ = ${devR[0]?.c10.toFixed(3)??'—'} | ${(fiDev*100).toFixed(0)}% imp | I₁₀ = ${i10disp?.toFixed(1)??'—'} mm/hr`;
   const ex1=exR.find(r=>r.key==="1"),dev1=devR.find(r=>r.key==="1");
   const ccF=+$("ccFactor").value||1.2;
   $("ccNoteVal").textContent=ccF.toFixed(2);
@@ -926,7 +1016,7 @@ function recalc(){
   $("compTable").innerHTML=ch+'</tbody>';
 
   /* ═══ ADDITIONAL CATCHMENTS ═══ */
-  const addCalcData=calcAddCatchments(cP);
+  const addCalcData=calcAddCatchments(lc,sp,ccF);
   renderAddCatchmentTables(addCalcData);
 
   /* ═══ DETENTION ═══ */
@@ -969,7 +1059,11 @@ function recalc(){
     $("stormInfo").innerHTML=`Area: ${(aKm2*1e3).toFixed(2)}×10⁻³ km² → t<sub>c,PM</sub> = ${tcPM.toFixed(2)} min → <strong style="color:var(--tank)">Storm duration = ${sd.toFixed(1)} min</strong>`;
   }
 
-  const bC10=Math.min(0.9,0.9*bFi+cP*(1-bFi));
+  // C₁₀ lookup for detention: use I₁₀ at storm duration
+  const col10det=matchCol(ifd.aepKeys,"10");
+  const i10det=col10det&&ifd.intensities[col10det]?interpI(ifd.durations,ifd.intensities[col10det],sd):60;
+  const bC10=lookupC10(bFi,i10det,lc,sp);
+  const eC10=lookupC10(fiEx,i10det,lc,sp);
   const allAep=[...FF,{aep:"1% 2100",label:"1% AEP 2100",fy:ccF,key:"1_2100"}];
   const dR=[];
 
@@ -979,7 +1073,6 @@ function recalc(){
     else{const c=matchCol(ifd.aepKeys,ff.key);aI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd):0}
     const bCy=Math.min(0.9,ff.fy*bC10);
     const r=runDet(ff,aI,rHa,bHa,bCy,tV,tH,outs,wW,sd);
-    const eC10=Math.min(0.9,0.9*fiEx+cP*(1-fiEx));
     let eCy,eI;
     if(ff.key==="1_2100"){eCy=Math.min(0.9,ccF*eC10);const c=matchCol(ifd.aepKeys,"1");eI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd)*ccF:0}
     else{eCy=Math.min(0.9,ff.fy*eC10);const c=matchCol(ifd.aepKeys,ff.key);eI=c&&ifd.intensities[c]?interpI(ifd.durations,ifd.intensities[c],sd):0}
@@ -1009,10 +1102,6 @@ function recalc(){
 }
 
 /* ══════════════════════ UTILITIES ══════════════════════ */
-function applySoilType(){
-  const v=$("soilType").value;
-  if(v){$("cPerv").value=v;recalc()}
-}
 function showToast(msg){
   const t=$("toast");t.textContent=msg;t.classList.add("show");
   setTimeout(()=>t.classList.remove("show"),2500);
@@ -1020,7 +1109,7 @@ function showToast(msg){
 function shareUrl(){
   const fields={
     lat:$("lat").value, lng:$("lng").value, area:$("area").value,
-    tc:$("tc").value, cPerv:$("cPerv").value, ccF:$("ccFactor").value,
+    tc:$("tc").value, lc:$("landCover").value, sp:$("soilPerm").value, ccF:$("ccFactor").value,
     fiEx:$("fiEx").value, fiDev:$("fiDev").value,
     det:$("detEnabled").checked?"1":"0",
     roof:$("roofArea").value, bFi:$("bypassFi").value,
@@ -1047,15 +1136,11 @@ function init(){
   $("lng").value=pf("lng",pf("long",153.398));
   $("area").value=pf("area",5000);
   $("tc").value=pf("tc",15);
-  $("cPerv").value=pf("cPerv",0.10);
   $("ccFactor").value=pf("ccF",1.20);
+  $("landCover").value=p.get("lc")||"medium";
+  $("soilPerm").value=p.get("sp")||"med";
   $("fiEx").value=pf("fiEx",0.30);$("fiExSlider").value=$("fiEx").value;
   $("fiDev").value=pf("fiDev",0.70);$("fiDevSlider").value=$("fiDev").value;
-
-  // Match soil type dropdown if a standard value
-  const cpVal=$("cPerv").value;
-  const soilOpt=[...document.querySelectorAll("#soilType option")].find(o=>o.value===cpVal);
-  $("soilType").value=soilOpt?cpVal:"";
 
   $("ifdCsv").value=SAMPLE_CSV;ifd=parseIFD(SAMPLE_CSV);
 
@@ -1075,13 +1160,6 @@ function init(){
   $("fiExSlider").oninput=()=>{$("fiEx").value=$("fiExSlider").value;recalc()};
   $("fiDev").oninput=()=>{$("fiDevSlider").value=$("fiDev").value;recalc()};
   $("fiDevSlider").oninput=()=>{$("fiDev").value=$("fiDevSlider").value;recalc()};
-  $("cPerv").oninput=()=>{
-    // Reset soil dropdown if user manually changes Cperv
-    const cpv=$("cPerv").value;
-    const match=[...document.querySelectorAll("#soilType option")].find(o=>o.value===cpv);
-    $("soilType").value=match?cpv:"";
-    recalc();
-  };
 
   ["lat","lng","area","tc","ccFactor","roofArea","bypassFi","tankVol","tankH","ovrWidth","o1d","o1h","o2d","o2h","o3d","o3h"].forEach(id=>$(id).oninput=recalc);
   window.addEventListener("resize",()=>{if($("detEnabled").checked&&lastDetResults)recalc()});
